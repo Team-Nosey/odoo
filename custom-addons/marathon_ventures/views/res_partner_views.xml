@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- Add Marathon-specific fields to the standard Partner form. -->
+    <record id="view_partner_form_marathon" model="ir.ui.view">
+        <field name="name">res.partner.form.marathon</field>
+        <field name="model">res.partner</field>
+        <field name="inherit_id" ref="base.view_partner_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//notebook" position="inside">
+                <page string="Marathon Ventures" name="marathon_ventures">
+                    <group>
+                        <group>
+                            <field name="marathon_role"/>
+                            <field name="is_agency"/>
+                            <field name="is_advertiser"/>
+                            <field name="is_network"/>
+                            <field name="is_vendor_account"/>
+                            <field name="contact_role"/>
+                        </group>
+                        <group>
+                            <field name="account_number"/>
+                            <field name="client_code"/>
+                            <field name="sf_account_id"/>
+                            <field name="advertiser_credit_limit"/>
+                            <field name="intacct_balance"/>
+                            <field name="hold_placed"/>
+                            <field name="cia_required"/>
+                            <field name="approved_to_book"/>
+                        </group>
+                    </group>
+                    <group string="Buyer (Contact) Details" invisible="contact_role != 'buyer'">
+                        <field name="buyer_email"/>
+                    </group>
+                    <group string="Linked Records">
+                        <field name="deal_count" readonly="1"/>
+                    </group>
+                </page>
+            </xpath>
+        </field>
+    </record>
+
+</odoo>

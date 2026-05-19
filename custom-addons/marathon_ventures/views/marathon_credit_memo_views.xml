@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_marathon_credit_memo_list" model="ir.ui.view">
+        <field name="name">marathon.credit.memo.list</field>
+        <field name="model">marathon.credit.memo</field>
+        <field name="arch" type="xml">
+            <list decoration-info="state=='submitted'"
+                  decoration-success="state=='approved' or state=='applied'"
+                  decoration-danger="state=='rejected'">
+                <field name="name"/>
+                <field name="deal_id"/>
+                <field name="advertiser_id"/>
+                <field name="program_id"/>
+                <field name="credit_type"/>
+                <field name="amount" widget="monetary"/>
+                <field name="currency_id" column_invisible="1"/>
+                <field name="state" widget="badge"/>
+                <field name="create_date"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_marathon_credit_memo_form" model="ir.ui.view">
+        <field name="name">marathon.credit.memo.form</field>
+        <field name="model">marathon.credit.memo</field>
+        <field name="arch" type="xml">
+            <form>
+                <header>
+                    <button name="action_submit" type="object" string="Submit"
+                            class="oe_highlight" invisible="state != 'draft'"/>
+                    <button name="action_approve" type="object" string="Approve"
+                            class="oe_highlight" invisible="state != 'submitted'"/>
+                    <button name="action_apply" type="object" string="Mark Applied"
+                            invisible="state != 'approved'"/>
+                    <button name="action_reject" type="object" string="Reject"
+                            invisible="state not in ('submitted','approved')"/>
+                    <button name="action_reset_to_draft" type="object" string="Reset to Draft"
+                            invisible="state == 'draft'"/>
+                    <field name="state" widget="statusbar"
+                           statusbar_visible="draft,submitted,approved,applied"/>
+                </header>
+                <sheet>
+                    <div class="oe_title">
+                        <h1><field name="name" readonly="1"/></h1>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="deal_id" required="1"/>
+                            <field name="schedule_id"/>
+                            <field name="spot_data_id"/>
+                            <field name="invoice_id"/>
+                            <field name="agency_discrepancy_task_id"/>
+                        </group>
+                        <group>
+                            <field name="advertiser_id"/>
+                            <field name="brand_id"/>
+                            <field name="program_id"/>
+                            <field name="requested_by_id"/>
+                            <field name="approver_id"/>
+                            <field name="approval_date"/>
+                        </group>
+                    </group>
+                    <group>
+                        <group>
+                            <field name="credit_type" required="1"/>
+                            <field name="requires_network_approval"/>
+                            <field name="approval_email_attachment"
+                                   filename="approval_email_filename"
+                                   invisible="not requires_network_approval"
+                                   required="requires_network_approval and state == 'submitted'"/>
+                            <field name="approval_email_filename" invisible="1"/>
+                        </group>
+                        <group>
+                            <field name="aired_date"/>
+                            <field name="discrepancy_date"/>
+                            <field name="units_count"/>
+                            <field name="amount" widget="monetary"/>
+                            <field name="currency_id"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Reason">
+                            <field name="reason_text" placeholder="Detailed explanation of the discrepancy..."/>
+                        </page>
+                        <page string="Rejection" invisible="state != 'rejected'">
+                            <field name="rejection_reason"/>
+                        </page>
+                    </notebook>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_marathon_credit_memo_search" model="ir.ui.view">
+        <field name="name">marathon.credit.memo.search</field>
+        <field name="model">marathon.credit.memo</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="name"/>
+                <field name="deal_id"/>
+                <field name="advertiser_id"/>
+                <field name="program_id"/>
+                <filter name="filter_open" string="Open"
+                        domain="[('state','in',('draft','submitted','approved'))]"/>
+                <filter name="filter_my" string="My Credit Memos"
+                        domain="[('requested_by_id','=',uid)]"/>
+                    <filter name="group_state" string="Status"
+                            context="{'group_by':'state'}"/>
+                    <filter name="group_type" string="Credit Type"
+                            context="{'group_by':'credit_type'}"/>
+                    <filter name="group_program" string="Network"
+                            context="{'group_by':'program_id'}"/>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_marathon_credit_memo" model="ir.actions.act_window">
+        <field name="name">Credit Memos (SFCM)</field>
+        <field name="res_model">marathon.credit.memo</field>
+        <field name="view_mode">list,form</field>
+        <field name="search_view_id" ref="view_marathon_credit_memo_search"/>
+    </record>
+
+</odoo>

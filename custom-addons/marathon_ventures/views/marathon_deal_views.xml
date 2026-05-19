@@ -1,0 +1,288 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_marathon_deal_tree" model="ir.ui.view">
+        <field name="name">marathon.deal.tree</field>
+        <field name="model">marathon.deal</field>
+        <field name="arch" type="xml">
+            <list string="Deals"
+                  decoration-success="status == 'Sold' or status == 'Sold'"
+                  decoration-info="status == 'Budget' or status == 'Budget'"
+                  decoration-muted="status == 'Canceled' or status == 'Historical'">
+                <field name="name"/>
+                <field name="network_deal_number"/>
+                <field name="program_id"/>
+                <field name="advertiser_id"/>
+                <field name="brand_id"/>
+                <field name="campaign"/>
+                <field name="length"/>
+                <field name="status"/>
+                <field name="count_of_schedules"/>
+                <field name="sum_of_total_dollars" sum="Total"/>
+                <field name="currency_id" invisible="1"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_marathon_deal_kanban" model="ir.ui.view">
+        <field name="name">marathon.deal.kanban</field>
+        <field name="model">marathon.deal</field>
+        <field name="arch" type="xml">
+            <kanban default_group_by="status">
+                <templates>
+                    <t t-name="card">
+                        <div class="o_kanban_record_top">
+                            <field name="name" class="fw-bold fs-5"/>
+                        </div>
+                        <field name="program_id"/>
+                        <div>
+                            <field name="advertiser_id"/> / <field name="brand_id"/>
+                        </div>
+                        <div class="mt-1">
+                            <field name="sum_of_total_dollars" widget="monetary"/>
+                        </div>
+                    </t>
+                </templates>
+            </kanban>
+        </field>
+    </record>
+
+    <record id="view_marathon_deal_form" model="ir.ui.view">
+        <field name="name">marathon.deal.form</field>
+        <field name="model">marathon.deal</field>
+        <field name="arch" type="xml">
+            <form string="Deal">
+                <header>
+                    <button name="action_book" type="object" string="Mark Sold"
+                            class="btn-primary"
+                            invisible="status != 'Budget'"/>
+                    <button name="action_complete" type="object"
+                            string="Mark Historical"
+                            invisible="status != 'Sold'"/>
+                    <button name="action_cancel" type="object" string="Cancel"
+                            invisible="status == 'Canceled'"
+                            confirm="Cancel this deal? All schedules will be marked cancelled."/>
+                    <button name="action_reset_to_draft" type="object"
+                            string="Reset to Budget"
+                            invisible="status == 'Budget'"/>
+                    <button name="action_open_deal_revisions" type="object"
+                            string="Deal Revisions"
+                            class="btn-secondary"
+                            invisible="status in ('Budget','Canceled')"/>
+                    <field name="status" widget="statusbar"
+                           statusbar_visible="Budget,Sold,Historical"/>
+                </header>
+                <sheet>
+                    <div class="oe_title">
+                        <h1>
+                            <field name="name" readonly="1"/>
+                        </h1>
+                        <h3>
+                            Network Deal #
+                            <field name="network_deal_number" placeholder="Provided by Planner"/>
+                        </h3>
+                    </div>
+
+                    <group>
+                        <group string="Identification">
+                            <field name="record_type"/>
+                            <field name="agency_deal_number"/>
+                            <field name="sf_deal_id" readonly="1"/>
+                            <field name="length"/>
+                            <field name="min_sep"/>
+                            <field name="max_sep"/>
+                        </group>
+                        <group string="Relationships">
+                            <field name="program_id"/>
+                            <field name="brand_id"/>
+                            <field name="advertiser_id" readonly="1"/>
+                            <field name="client_account_id"/>
+                            <field name="contact_id"/>
+                            <field name="sales_plan_id"/>
+                        </group>
+                    </group>
+
+                    <group>
+                        <group string="Campaign &amp; Codes">
+                            <field name="campaign"/>
+                            <field name="estimate"/>
+                            <field name="access_code"/>
+                            <field name="client_code"/>
+                            <field name="product_code"/>
+                            <field name="digital_id"/>
+                        </group>
+                        <group string="Pricing">
+                            <field name="rate"/>
+                            <field name="budget_30"/>
+                            <field name="currency_id" groups="base.group_multi_currency"/>
+                            <field name="deal_class"/>
+                            <field name="tier"/>
+                            <field name="quarter"/>
+                            <field name="year"/>
+                            <field name="demographics"/>
+                            <field name="client_dr_gm_hybrid"/>
+                        </group>
+                    </group>
+
+                    <group>
+                        <group string="Flags">
+                            <field name="pi"/>
+                            <field name="priority"/>
+                            <field name="e_i_friendly"/>
+                            <field name="revised" readonly="1"/>
+                            <field name="test_pp"/>
+                        </group>
+                        <group string="Important Dates">
+                            <field name="log_exp_date"/>
+                            <field name="ltc_date"/>
+                            <field name="week_pending" readonly="1"/>
+                            <field name="related_advertiser_log_exp_date" readonly="1"/>
+                        </group>
+                    </group>
+
+                    <notebook>
+                        <page string="Schedules" name="schedules">
+                            <field name="schedule_ids" context="{'default_deal_parent_id': id}">
+                                <list editable="bottom"
+                                      decoration-danger="is_cancelled == True"
+                                      decoration-info="is_test == True"
+                                      decoration-warning="is_priority == True">
+                                    <field name="name" readonly="1"/>
+                                    <field name="week"/>
+                                    <field name="daypart"/>
+                                    <field name="start_time" widget="float_time"/>
+                                    <field name="end_time" widget="float_time"/>
+                                    <field name="days_allowed_summary" string="Days"/>
+                                    <field name="rate" sum="Avg"/>
+                                    <field name="units_available" sum="Total"/>
+                                    <field name="cap"/>
+                                    <field name="max_per_day"/>
+                                    <field name="is_test"/>
+                                    <field name="is_priority"/>
+                                    <field name="is_special"/>
+                                    <field name="is_cancelled"/>
+                                    <field name="total_dollars" sum="Total $"/>
+                                    <field name="currency_id" invisible="1"/>
+                                </list>
+                            </field>
+                        </page>
+                        <page string="Bundle" name="bundle">
+                            <group>
+                                <field name="bundle_action"/>
+                                <field name="bundle_start_week"/>
+                                <field name="bundle_version"/>
+                            </group>
+                        </page>
+                        <page string="Restricted Programming" name="restricted">
+                            <field name="restricted_programming_dna" nolabel="1"/>
+                        </page>
+                        <page string="Notes &amp; Hiatus" name="notes">
+                            <group>
+                                <field name="hiatus_dates"/>
+                            </group>
+                            <group string="Comments">
+                                <field name="raycom_comments" nolabel="1"/>
+                            </group>
+                        </page>
+                        <page string="Double Check Report" name="double_check">
+                            <group>
+                                <group>
+                                    <field name="count_of_schedules" readonly="1"/>
+                                    <field name="count_of_weeks" readonly="1"/>
+                                    <field name="sum_of_units_available" readonly="1"/>
+                                    <field name="sum_of_total_dollars" readonly="1"/>
+                                </group>
+                                <group>
+                                    <field name="week_min" readonly="1"/>
+                                    <field name="week_max" readonly="1"/>
+                                    <field name="ratings_quarter" readonly="1"/>
+                                </group>
+                            </group>
+                            <separator string="Review Each Schedule"/>
+                            <field name="schedule_ids" readonly="1">
+                                <list>
+                                    <field name="week"/>
+                                    <field name="days_allowed_summary"/>
+                                    <field name="start_time" widget="float_time"/>
+                                    <field name="end_time" widget="float_time"/>
+                                    <field name="rate"/>
+                                    <field name="units_available"/>
+                                    <field name="total_dollars"/>
+                                    <field name="currency_id" invisible="1"/>
+                                </list>
+                            </field>
+                        </page>
+                        <page string="Display Strings" name="display">
+                            <group>
+                                <field name="account_advertiser" readonly="1"/>
+                                <field name="account_advertiser_brand" readonly="1"/>
+                                <field name="program_account_advertiser_brand" readonly="1"/>
+                                <field name="contact_email" readonly="1"/>
+                            </group>
+                        </page>
+                    </notebook>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_marathon_deal_search" model="ir.ui.view">
+        <field name="name">marathon.deal.search</field>
+        <field name="model">marathon.deal</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="name"/>
+                <field name="network_deal_number"/>
+                <field name="program_id"/>
+                <field name="advertiser_id"/>
+                <field name="brand_id"/>
+                <field name="client_account_id"/>
+                <field name="contact_id"/>
+                <field name="campaign"/>
+                <separator/>
+                <filter string="Budget" name="filter_budget" domain="[('status','=','Budget')]"/>
+                <filter string="Pending Approval" name="pending" domain="[('status','=','Budget')]"/>
+                <filter string="Booked" name="booked" domain="[('status','=','Sold')]"/>
+                <filter string="On Air" name="on_air" domain="[('status','=','Sold')]"/>
+                <filter string="Completed" name="completed" domain="[('status','=','Historical')]"/>
+                <filter string="Cancelled" name="cancelled" domain="[('status','=','Canceled')]"/>
+                <separator/>
+                <filter string="Revised" name="filter_revised" domain="[('revised','=',True)]"/>
+                <filter string="Priority" name="filter_priority" domain="[('priority','=',True)]"/>
+                <filter string="PI" name="filter_pi" domain="[('pi','=',True)]"/>
+                <separator/>
+                <filter string="Q1" name="q1" domain="[('quarter','=','q1')]"/>
+                <filter string="Q2" name="q2" domain="[('quarter','=','q2')]"/>
+                <filter string="Q3" name="q3" domain="[('quarter','=','q3')]"/>
+                <filter string="Q4" name="q4" domain="[('quarter','=','q4')]"/>
+                <separator/>
+                <filter string="Status" name="g_status" context="{'group_by':'status'}"/>
+                <filter string="Program" name="g_prog" context="{'group_by':'program_id'}"/>
+                <filter string="Advertiser" name="g_adv" context="{'group_by':'advertiser_id'}"/>
+                <filter string="Brand" name="g_brand" context="{'group_by':'brand_id'}"/>
+                <filter string="Quarter" name="g_q" context="{'group_by':'quarter'}"/>
+                <filter string="Year" name="g_y" context="{'group_by':'year'}"/>
+                <filter string="Class" name="g_class" context="{'group_by':'deal_class'}"/>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_marathon_deal" model="ir.actions.act_window">
+        <field name="name">Deals</field>
+        <field name="res_model">marathon.deal</field>
+        <field name="view_mode">list,kanban,form</field>
+        <field name="search_view_id" ref="view_marathon_deal_search"/>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Create your first Deal
+            </p>
+            <p>
+                A Deal represents a purchase order from an Agency on behalf
+                of an Advertiser. Within each deal you'll create Schedules
+                (one per order line).
+            </p>
+        </field>
+    </record>
+
+</odoo>

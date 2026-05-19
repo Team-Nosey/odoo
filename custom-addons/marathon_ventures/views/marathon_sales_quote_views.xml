@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_marathon_sales_quote_tree" model="ir.ui.view">
+        <field name="name">marathon.sales.quote.tree</field>
+        <field name="model">marathon.sales.quote</field>
+        <field name="arch" type="xml">
+            <list string="Sales Quotes">
+                <field name="name"/>
+                <field name="deal_id"/>
+                <field name="advertiser_id"/>
+                <field name="brand_id"/>
+                <field name="program_id"/>
+                <field name="quote_date"/>
+                <field name="valid_until"/>
+                <field name="total_amount" sum="Total"/>
+                <field name="state"/>
+                <field name="currency_id" invisible="1"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_marathon_sales_quote_form" model="ir.ui.view">
+        <field name="name">marathon.sales.quote.form</field>
+        <field name="model">marathon.sales.quote</field>
+        <field name="arch" type="xml">
+            <form string="Sales Quote">
+                <header>
+                    <button name="action_send" type="object" string="Send"
+                            invisible="state != 'draft'" class="btn-primary"/>
+                    <button name="action_approve" type="object" string="Approve"
+                            invisible="state not in ('draft','sent')"
+                            class="btn-primary"/>
+                    <button name="action_reject" type="object" string="Reject"
+                            invisible="state in ('rejected','converted')"/>
+                    <button name="action_convert_to_order" type="object"
+                            string="Convert to Order"
+                            invisible="state != 'approved'"
+                            class="btn-success"/>
+                    <field name="state" widget="statusbar"
+                           statusbar_visible="draft,sent,approved,converted"/>
+                </header>
+                <sheet>
+                    <div class="oe_title">
+                        <h1><field name="name" readonly="1"/></h1>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="deal_id"/>
+                            <field name="advertiser_id"/>
+                            <field name="brand_id"/>
+                            <field name="program_id"/>
+                            <field name="client_account_id"/>
+                            <field name="contact_id"/>
+                        </group>
+                        <group>
+                            <field name="quote_date"/>
+                            <field name="valid_until"/>
+                            <field name="currency_id"/>
+                            <field name="total_amount" readonly="1"/>
+                            <field name="sale_order_id" readonly="1"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Items">
+                            <field name="item_ids">
+                                <list editable="bottom">
+                                    <field name="line_number"/>
+                                    <field name="name"/>
+                                    <field name="description"/>
+                                    <field name="schedule_id"/>
+                                    <field name="quantity"/>
+                                    <field name="unit_price"/>
+                                    <field name="line_total" sum="Total"/>
+                                    <field name="currency_id" invisible="1"/>
+                                </list>
+                            </field>
+                        </page>
+                        <page string="Totals">
+                            <field name="total_id">
+                                <list editable="bottom">
+                                    <field name="sequence" widget="handle"/>
+                                    <field name="name"/>
+                                    <field name="amount" sum="Total"/>
+                                    <field name="currency_id" invisible="1"/>
+                                </list>
+                            </field>
+                        </page>
+                        <page string="Notes"><field name="notes" nolabel="1"/></page>
+                    </notebook>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_marathon_sales_quote" model="ir.actions.act_window">
+        <field name="name">Sales Quotes</field>
+        <field name="res_model">marathon.sales.quote</field>
+        <field name="view_mode">list,form</field>
+    </record>
+
+</odoo>

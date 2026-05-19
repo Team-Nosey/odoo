@@ -1,0 +1,179 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_marathon_program_tree" model="ir.ui.view">
+        <field name="name">marathon.program.tree</field>
+        <field name="model">marathon.program</field>
+        <field name="arch" type="xml">
+            <list string="Programs">
+                <field name="program_number"/>
+                <field name="name"/>
+                <field name="client_code"/>
+                <field name="network_owner"/>
+                <field name="cable_synd"/>
+                <field name="lead_id"/>
+                <field name="account_exec_1_id"/>
+                <field name="deal_count" string="# Deals"/>
+                <field name="inactive" invisible="1"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_marathon_program_form" model="ir.ui.view">
+        <field name="name">marathon.program.form</field>
+        <field name="model">marathon.program</field>
+        <field name="arch" type="xml">
+            <form string="Program">
+                <header>
+                    <button name="action_toggle_inactive" type="object"
+                            string="Archive" class="btn-secondary"
+                            invisible="inactive"/>
+                    <button name="action_toggle_inactive" type="object"
+                            string="Unarchive" class="btn-secondary"
+                            invisible="not inactive"/>
+                </header>
+                <sheet>
+                    <div class="oe_title">
+                        <label for="name"/>
+                        <h1>
+                            <field name="name" placeholder="Program / Network Name"/>
+                        </h1>
+                        <h3>
+                            <field name="program_number" readonly="1"/>
+                        </h3>
+                    </div>
+                    <group>
+                        <group string="Identification">
+                            <field name="client_code"/>
+                            <field name="digital_id"/>
+                            <field name="station_call_letter"/>
+                            <field name="cable_synd"/>
+                            <field name="network_owner"/>
+                            <field name="network_system"/>
+                            <field name="deal_entity"/>
+                            <field name="ratings_quarter"/>
+                        </group>
+                        <group string="Flags">
+                            <field name="barter"/>
+                            <field name="rated"/>
+                            <field name="inactive"/>
+                            <field name="detailed_invoices"/>
+                            <field name="invoice_run"/>
+                            <field name="spot_data_sync"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Team" name="team">
+                            <group>
+                                <group>
+                                    <field name="lead_id"/>
+                                    <field name="lead_backup_id"/>
+                                    <field name="assistant_id"/>
+                                    <field name="assistant_backup_id"/>
+                                </group>
+                                <group>
+                                    <field name="account_exec_1_id"/>
+                                    <field name="account_exec_2_id"/>
+                                    <field name="post_log_id"/>
+                                    <field name="logs_contact_id"/>
+                                    <field name="logs_cc"/>
+                                    <field name="vendor_account_id"/>
+                                </group>
+                            </group>
+                        </page>
+                        <page string="Invoicing" name="invoicing">
+                            <group>
+                                <field name="invoice_month"/>
+                                <field name="finance_invoice_template"/>
+                            </group>
+                        </page>
+                        <page string="Filler / Daypart Counts" name="fillers">
+                            <group>
+                                <group>
+                                    <field name="em_filler"/>
+                                    <field name="da_filler"/>
+                                    <field name="ef_filler"/>
+                                    <field name="fr_filler"/>
+                                    <field name="lf_filler"/>
+                                </group>
+                                <group>
+                                    <field name="ln_filler"/>
+                                    <field name="on_filler"/>
+                                    <field name="pr_filler"/>
+                                    <field name="ros_filler"/>
+                                    <field name="syndication_filler"/>
+                                    <field name="filler_em"/>
+                                </group>
+                            </group>
+                        </page>
+                        <page string="Logs &amp; Reconciliation" name="logs">
+                            <group>
+                                <group>
+                                    <field name="clock_start_time"/>
+                                    <field name="log_week"/>
+                                    <field name="prelog_date"/>
+                                    <field name="prelog_date_time"/>
+                                    <field name="prelog_version"/>
+                                </group>
+                                <group>
+                                    <field name="pp_revision"/>
+                                    <field name="pp_revision_cycle"/>
+                                    <field name="rc_reconciled_lf_week"/>
+                                    <field name="rc_reconciled_week"/>
+                                    <field name="reconciled_week"/>
+                                    <field name="template"/>
+                                    <field name="version_time_stamp"/>
+                                </group>
+                            </group>
+                            <group string="History">
+                                <field name="pp_log_check_nw_history" nolabel="1"/>
+                                <field name="pp_log_check_tw_history" nolabel="1"/>
+                            </group>
+                        </page>
+                        <page string="Deals" name="deals">
+                            <field name="deal_ids" readonly="1">
+                                <list>
+                                    <field name="name"/>
+                                    <field name="advertiser_id"/>
+                                    <field name="brand_id"/>
+                                    <field name="status"/>
+                                    <field name="sum_of_total_dollars"/>
+                                </list>
+                            </field>
+                        </page>
+                    </notebook>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_marathon_program_search" model="ir.ui.view">
+        <field name="name">marathon.program.search</field>
+        <field name="model">marathon.program</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="name"/>
+                <field name="client_code"/>
+                <field name="program_number"/>
+                <field name="network_owner"/>
+                <field name="lead_id"/>
+                <filter string="Inactive" name="filter_inactive" domain="[('inactive','=',True)]"/>
+                <filter string="Barter" name="filter_barter" domain="[('barter','=',True)]"/>
+                <filter string="Rated" name="filter_rated" domain="[('rated','=',True)]"/>
+                <separator/>
+                <filter string="Network Owner" name="g_owner" context="{'group_by':'network_owner'}"/>
+                <filter string="Cable / Synd" name="g_cs" context="{'group_by':'cable_synd'}"/>
+                <filter string="Lead" name="g_lead" context="{'group_by':'lead_id'}"/>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_marathon_program" model="ir.actions.act_window">
+        <field name="name">Programs / Networks</field>
+        <field name="res_model">marathon.program</field>
+        <field name="view_mode">list,form</field>
+        <field name="search_view_id" ref="view_marathon_program_search"/>
+    </record>
+
+</odoo>

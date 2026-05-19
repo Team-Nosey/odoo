@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_marathon_credit_application_list" model="ir.ui.view">
+        <field name="name">marathon.credit.application.list</field>
+        <field name="model">marathon.credit.application</field>
+        <field name="arch" type="xml">
+            <list decoration-success="state=='approved'"
+                  decoration-warning="state=='cia'"
+                  decoration-danger="state=='declined'">
+                <field name="name"/>
+                <field name="agency_id"/>
+                <field name="applicant_type"/>
+                <field name="application_received_date"/>
+                <field name="reference_count"/>
+                <field name="references_responded"/>
+                <field name="credit_limit_approved" widget="monetary"/>
+                <field name="currency_id" column_invisible="1"/>
+                <field name="state" widget="badge"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_marathon_credit_application_form" model="ir.ui.view">
+        <field name="name">marathon.credit.application.form</field>
+        <field name="model">marathon.credit.application</field>
+        <field name="arch" type="xml">
+            <form>
+                <header>
+                    <button name="action_mark_received" type="object" string="Application Received"
+                            class="oe_highlight" invisible="state != 'new'"/>
+                    <button name="action_lawyer_approved" type="object" string="Lawyer Approved"
+                            invisible="state != 'lawyer_review'"/>
+                    <button name="action_lawyer_rejected" type="object" string="Lawyer Rejected"
+                            invisible="state != 'lawyer_review'"/>
+                    <button name="action_references_complete" type="object" string="References Complete"
+                            invisible="state != 'references_pending'"/>
+                    <button name="action_approve" type="object" string="Approve"
+                            class="oe_highlight"
+                            invisible="state not in ('reports_pending','references_pending')"/>
+                    <button name="action_set_cia" type="object" string="Mark CIA"
+                            invisible="state in ('approved','cia','declined')"/>
+                    <button name="action_decline" type="object" string="Decline"
+                            invisible="state in ('approved','cia','declined')"/>
+                    <field name="state" widget="statusbar"
+                           statusbar_visible="new,received,lawyer_review,references_pending,reports_pending,approved"/>
+                </header>
+                <sheet>
+                    <div class="oe_title">
+                        <h1><field name="name" readonly="1"/></h1>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="applicant_type"/>
+                            <field name="agency_id" required="1"/>
+                            <field name="ae_id"/>
+                            <field name="application_received_date"/>
+                        </group>
+                        <group>
+                            <field name="is_signed"/>
+                            <field name="has_markings"/>
+                            <field name="lawyer_review_required"/>
+                            <field name="lawyer_response"
+                                   invisible="not lawyer_review_required"/>
+                            <field name="application_attachment"
+                                   filename="application_filename"/>
+                            <field name="application_filename" invisible="1"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="References">
+                            <field name="reference_ids">
+                                <list editable="bottom">
+                                    <field name="sequence" widget="handle"/>
+                                    <field name="contact_name"/>
+                                    <field name="company_name"/>
+                                    <field name="reference_type"/>
+                                    <field name="email"/>
+                                    <field name="phone"/>
+                                    <field name="contacted_date"/>
+                                    <field name="responded"/>
+                                    <field name="response_date"/>
+                                </list>
+                            </field>
+                            <group>
+                                <field name="reference_count" readonly="1"/>
+                                <field name="references_responded" readonly="1"/>
+                            </group>
+                        </page>
+                        <page string="Reports">
+                            <group>
+                                <field name="dnb_report" filename="dnb_report_filename"/>
+                                <field name="dnb_report_filename" invisible="1"/>
+                                <field name="credit_safe_report" filename="credit_safe_report_filename"/>
+                                <field name="credit_safe_report_filename" invisible="1"/>
+                            </group>
+                        </page>
+                        <page string="Decision">
+                            <group>
+                                <group>
+                                    <field name="credit_limit_requested" widget="monetary"/>
+                                    <field name="credit_limit_approved" widget="monetary"/>
+                                    <field name="currency_id"/>
+                                </group>
+                                <group>
+                                    <field name="decision_date"/>
+                                </group>
+                            </group>
+                            <field name="decision_notes" placeholder="Reasoning..."/>
+                        </page>
+                    </notebook>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_marathon_credit_application" model="ir.actions.act_window">
+        <field name="name">Credit Applications</field>
+        <field name="res_model">marathon.credit.application</field>
+        <field name="view_mode">list,form</field>
+    </record>
+
+</odoo>

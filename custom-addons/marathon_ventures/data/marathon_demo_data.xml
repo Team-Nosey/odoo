@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data>
+
+        <!-- Scheduled job: Auto-flag overdue invoices.
+             Mirrors a Salesforce time-based workflow that watches the
+             Sales Invoice due date.
+             Note: in cron `code` actions Odoo's safe_eval does NOT expose
+             ``fields`` — we use ``datetime`` (which IS in the eval scope). -->
+        <record id="cron_invoice_overdue_check" model="ir.cron">
+            <field name="name">Marathon: Flag overdue Sales Invoices</field>
+            <field name="model_id" ref="model_marathon_sales_invoice"/>
+            <field name="state">code</field>
+            <field name="code">
+today = datetime.date.today()
+overdue = model.search([('state', 'in', ['issued', 'partial']), ('due_date', '&lt;', today)])
+overdue.write({'state': 'overdue'})
+            </field>
+            <field name="user_id" ref="base.user_root"/>
+            <field name="active" eval="True"/>
+            <field name="interval_number">1</field>
+            <field name="interval_type">days</field>
+        </record>
+
+        <!-- Scheduled job: Snowflake-style sync flag for Spot Data records. -->
+        <record id="cron_spot_data_sync" model="ir.cron">
+            <field name="name">Marathon: Mark new Spot Data as transferred</field>
+            <field name="model_id" ref="model_marathon_spot_data"/>
+            <field name="state">code</field>
+            <field name="code">
+to_mark = model.search([('snowflake_transferred', '=', False), ('locked', '=', True)], limit=500)
+to_mark.write({'snowflake_transferred': True})
+            </field>
+            <field name="user_id" ref="base.user_root"/>
+            <field name="active" eval="False"/>
+            <field name="interval_number">1</field>
+            <field name="interval_type">hours</field>
+        </record>
+
+    </data>
+</odoo>

@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_marathon_working_log_tree" model="ir.ui.view">
+        <field name="name">marathon.working.log.tree</field>
+        <field name="model">marathon.working.log</field>
+        <field name="arch" type="xml">
+            <list string="Working Logs">
+                <field name="name"/>
+                <field name="program_id"/>
+                <field name="deal_id"/>
+                <field name="schedule_id"/>
+                <field name="log_date"/>
+                <field name="week"/>
+                <field name="user_id"/>
+                <field name="state"/>
+                <field name="locked"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_marathon_working_log_form" model="ir.ui.view">
+        <field name="name">marathon.working.log.form</field>
+        <field name="model">marathon.working.log</field>
+        <field name="arch" type="xml">
+            <form string="Working Log">
+                <header>
+                    <button name="action_lock" type="object" string="Lock"
+                            invisible="locked" class="btn-secondary"/>
+                    <button name="action_unlock" type="object" string="Unlock"
+                            invisible="not locked"/>
+                    <field name="state" widget="statusbar"/>
+                </header>
+                <sheet>
+                    <div class="oe_title"><h1><field name="name"/></h1></div>
+                    <group>
+                        <group>
+                            <field name="program_id"/>
+                            <field name="deal_id"/>
+                            <field name="schedule_id"/>
+                            <field name="user_id"/>
+                        </group>
+                        <group>
+                            <field name="log_date"/>
+                            <field name="week"/>
+                            <field name="revision"/>
+                            <field name="revision_cycle"/>
+                            <field name="locked"/>
+                            <field name="prelog_count" readonly="1"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Notes">
+                            <group>
+                                <field name="notes" nolabel="1"/>
+                            </group>
+                            <group string="Issues Found">
+                                <field name="issues_found" nolabel="1"/>
+                            </group>
+                            <group string="Resolution">
+                                <field name="resolution" nolabel="1"/>
+                            </group>
+                        </page>
+                        <page string="Prelog Data">
+                            <field name="prelog_data_ids" readonly="1">
+                                <list>
+                                    <field name="schedule_id"/>
+                                    <field name="air_date"/>
+                                    <field name="title"/>
+                                    <field name="rate"/>
+                                </list>
+                            </field>
+                        </page>
+                    </notebook>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_marathon_working_log" model="ir.actions.act_window">
+        <field name="name">Working Logs</field>
+        <field name="res_model">marathon.working.log</field>
+        <field name="view_mode">list,form</field>
+    </record>
+
+</odoo>

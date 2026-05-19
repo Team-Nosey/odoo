@@ -1,0 +1,153 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- Section -->
+    <record id="view_marathon_knowledge_section_list" model="ir.ui.view">
+        <field name="name">marathon.knowledge.section.list</field>
+        <field name="model">marathon.knowledge.section</field>
+        <field name="arch" type="xml">
+            <list>
+                <field name="sequence" widget="handle"/>
+                <field name="name"/>
+                <field name="code"/>
+                <field name="article_count"/>
+                <field name="active"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_marathon_knowledge_section_form" model="ir.ui.view">
+        <field name="name">marathon.knowledge.section.form</field>
+        <field name="model">marathon.knowledge.section</field>
+        <field name="arch" type="xml">
+            <form>
+                <sheet>
+                    <div class="oe_title">
+                        <h1><field name="name" placeholder="Section name"/></h1>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="code"/>
+                            <field name="sequence"/>
+                            <field name="active"/>
+                        </group>
+                        <group>
+                            <field name="article_count"/>
+                        </group>
+                    </group>
+                    <field name="description" placeholder="Section purpose"/>
+                    <notebook>
+                        <page string="Articles">
+                            <field name="article_ids">
+                                <list>
+                                    <field name="sequence" widget="handle"/>
+                                    <field name="name"/>
+                                    <field name="audience"/>
+                                    <field name="state"/>
+                                    <field name="last_reviewed_date"/>
+                                </list>
+                            </field>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_marathon_knowledge_section" model="ir.actions.act_window">
+        <field name="name">Knowledge Sections</field>
+        <field name="res_model">marathon.knowledge.section</field>
+        <field name="view_mode">list,form</field>
+    </record>
+
+    <!-- Article -->
+    <record id="view_marathon_knowledge_article_list" model="ir.ui.view">
+        <field name="name">marathon.knowledge.article.list</field>
+        <field name="model">marathon.knowledge.article</field>
+        <field name="arch" type="xml">
+            <list>
+                <field name="name"/>
+                <field name="section_id"/>
+                <field name="audience"/>
+                <field name="state" widget="badge"/>
+                <field name="last_reviewed_date"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_marathon_knowledge_article_form" model="ir.ui.view">
+        <field name="name">marathon.knowledge.article.form</field>
+        <field name="model">marathon.knowledge.article</field>
+        <field name="arch" type="xml">
+            <form>
+                <header>
+                    <button name="action_publish" type="object" string="Publish"
+                            invisible="state == 'published'"/>
+                    <button name="action_archive_article" type="object"
+                            string="Archive" invisible="state == 'archived'"/>
+                    <field name="state" widget="statusbar"
+                           statusbar_visible="draft,published,archived"/>
+                </header>
+                <sheet>
+                    <div class="oe_title">
+                        <h1><field name="name" placeholder="Article title"/></h1>
+                        <field name="summary" placeholder="One-line summary"/>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="section_id"/>
+                            <field name="audience"/>
+                            <field name="related_model"/>
+                        </group>
+                        <group>
+                            <field name="sequence"/>
+                            <field name="last_reviewed_date"/>
+                            <field name="tag_ids" widget="many2many_tags"/>
+                            <field name="pdf_attachment" filename="pdf_filename"/>
+                            <field name="pdf_filename" invisible="1"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Body"><field name="body"/></page>
+                    </notebook>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_marathon_knowledge_article_search" model="ir.ui.view">
+        <field name="name">marathon.knowledge.article.search</field>
+        <field name="model">marathon.knowledge.article</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="name"/>
+                <field name="section_id"/>
+                <field name="tag_ids"/>
+                <filter name="filter_published" string="Published"
+                        domain="[('state','=','published')]"/>
+                <filter name="filter_draft" string="Draft"
+                        domain="[('state','=','draft')]"/>
+                <separator/>
+                <filter name="filter_for_planners" string="For Planners"
+                        domain="[('audience','in',['all','planner'])]"/>
+                <filter name="filter_for_finance" string="For Finance"
+                        domain="[('audience','in',['all','finance'])]"/>
+                <filter name="filter_for_ops" string="For Ops"
+                        domain="[('audience','in',['all','ops'])]"/>
+                    <filter name="group_section" string="Section"
+                            context="{'group_by':'section_id'}"/>
+                    <filter name="group_audience" string="Audience"
+                            context="{'group_by':'audience'}"/>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_marathon_knowledge_article" model="ir.actions.act_window">
+        <field name="name">Knowledge Base</field>
+        <field name="res_model">marathon.knowledge.article</field>
+        <field name="view_mode">list,form</field>
+        <field name="search_view_id" ref="view_marathon_knowledge_article_search"/>
+    </record>
+
+</odoo>

@@ -1,0 +1,531 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="1">
+
+        <record id="ks_ops" model="marathon.knowledge.section">
+            <field name="name">Operations</field>
+            <field name="code">ops</field>
+            <field name="sequence">10</field>
+            <field name="description">Prelog/Postlog/Dashboard SOPs</field>
+        </record>
+
+        <record id="ks_finance" model="marathon.knowledge.section">
+            <field name="name">Finance &amp; Billing</field>
+            <field name="code">finance</field>
+            <field name="sequence">20</field>
+            <field name="description">Credit, invoicing, AR/AP processes</field>
+        </record>
+
+        <record id="ks_sales" model="marathon.knowledge.section">
+            <field name="name">Sales Operations</field>
+            <field name="code">sales</field>
+            <field name="sequence">30</field>
+            <field name="description">Deal entry, agency/advertiser, requests</field>
+        </record>
+
+        <record id="ks_training" model="marathon.knowledge.section">
+            <field name="name">Training &amp; Communication</field>
+            <field name="code">training</field>
+            <field name="sequence">40</field>
+            <field name="description">Onboarding, email, workplace</field>
+        </record>
+
+        <record id="ks_tools" model="marathon.knowledge.section">
+            <field name="name">Tools</field>
+            <field name="code">tools</field>
+            <field name="sequence">50</field>
+            <field name="description">Egnyte, Filing, Nosey, etc.</field>
+        </record>
+
+        <record id="ka_amazon_business_account_training" model="marathon.knowledge.article">
+            <field name="name">Amazon Business Account Training</field>
+            <field name="section_id" ref="ks_training"/>
+            <field name="audience">all</field>
+            <field name="state">published</field>
+            <field name="sequence">10</field>
+            <field name="pdf_filename">Amazon Business Account Training.pdf</field>
+            <field name="summary">SOP imported from Salesforce training library</field>
+        </record>
+
+        <record id="ka_mvms_bundle_processes" model="marathon.knowledge.article">
+            <field name="name">Mvms Bundle Processes</field>
+            <field name="section_id" ref="ks_sales"/>
+            <field name="audience">all</field>
+            <field name="state">published</field>
+            <field name="sequence">20</field>
+            <field name="pdf_filename">MVMS Bundle Processes.pdf</field>
+            <field name="summary">SOP imported from Salesforce training library</field>
+        </record>
+
+        <record id="ka_a_r_accounting_process_e0mfq6j" model="marathon.knowledge.article">
+            <field name="name">A R Accounting Process</field>
+            <field name="section_id" ref="ks_finance"/>
+            <field name="audience">finance</field>
+            <field name="state">published</field>
+            <field name="sequence">30</field>
+            <field name="pdf_filename">a-r-accounting-process--E0MFQ6J.pdf</field>
+            <field name="summary">SOP imported from Salesforce training library</field>
+        </record>
+
+        <record id="ka_additions_to_the_current_modules_3rxk6kg" model="marathon.knowledge.article">
+            <field name="name">Additions To The Current Modules</field>
+            <field name="section_id" ref="ks_ops"/>
+            <field name="audience">ops</field>
+            <field name="state">published</field>
+            <field name="sequence">40</field>
+            <field name="pdf_filename">additions-to-the-current-modules-3RXK6KgF.pdf</field>
+            <field name="summary">SOP imported from Salesforce training library</field>
+        </record>
+
+        <record id="ka_agency_discrepancy_tasks_q5sou_yt" model="marathon.knowledge.article">
+            <field name="name">Agency Discrepancy Tasks</field>
+            <field name="section_id" ref="ks_sales"/>
+            <field name="audience">all</field>
+            <field name="state">published</field>
+            <field name="sequence">50</field>
+            <field name="pdf_filename">agency-discrepancy-tasks-q5SOu_YT.pdf</field>
+            <field name="summary">SOP imported from Salesforce training library</field>
+        </record>
+
+        <record id="ka_bills_a2fw7xwn" model="marathon.knowledge.article">
+            <field name="name">Bills</field>
+            <field name="section_id" ref="ks_finance"/>
+            <field name="audience">finance</field>
+            <field name="state">published</field>
+            <field name="sequence">60</field>
+            <field name="pdf_filename">bills-a2Fw7XWn.pdf</field>
+            <field name="summary">SOP imported from Salesforce training library</field>
+        </record>
+
+        <record id="ka_bundles_101_fdxhlp33" model="marathon.knowledge.article">
+            <field name="name">Bundles 101</field>
+            <field name="section_id" ref="ks_sales"/>
+            <field name="audience">all</field>
+            <field name="state">published</field>
+            <field name="sequence">70</field>
+            <field name="pdf_filename">bundles-101-FdxHlP33.pdf</field>
+            <field name="summary">SOP imported from Salesforce training library</field>
+        </record>
+
+        <record id="ka_buyer_contacts_in_sf_i6_4fjr" model="marathon.knowledge.article">
+            <field name="name">Buyer Contacts In Sf I6 4fjr</field>
+            <field name="section_id" ref="ks_sales"/>
+            <field name="audience">all</field>
+            <field name="state">published</field>
+            <field name="sequence">80</field>
+            <field name="pdf_filename">buyer-contacts-in-sf-I6_4fJR-.pdf</field>
+            <field name="summary">SOP imported from Salesforce training library</field>
+        </record>
+
+        <record id="ka_communication_fundamentals_5jdhdiyb" model="marathon.knowledge.article">
+            <field name="name">Communication Fundamentals</field>
+            <field name="section_id" ref="ks_training"/>
+            <field name="audience">all</field>
+            <field name="state">published</field>
+            <field name="sequence">90</field>
+            <field name="pdf_filename">communication-fundamentals-5jDhdiYB.pdf</field>
+            <field name="summary">SOP imported from Salesforce training library</field>
+        </record>
+
+        <record id="ka_credit_approval_process_a7jhcjf" model="marathon.knowledge.article">
+            <field name="name">Credit Approval Process A7jhcjf</field>
+            <field name="section_id" ref="ks_finance"/>
+            <field name="audience">finance</field>
+            <field name="state">published</field>
+            <field name="sequence">100</field>
+            <field name="pdf_filename">credit-approval-process-A7jHcJf-.pdf</field>
+            <field name="summary">SOP imported from Salesforce training library</field>
+        </record>
+
+        <record id="ka_dashboard_overruns_y_hgs5di" model="marathon.knowledge.article">
+            <field name="name">Dashboard Overruns Y</field>
+            <field name="section_id" ref="ks_ops"/>
+            <field name="audience">ops</field>
+            <field name="state">published</field>
+            <field name="sequence">110</field>
+            <field name="pdf_filename">dashboard-overruns-Y-hGs5DI.pdf</field>
+            <field name="summary">SOP imported from Salesforce training library</field>
+        </record>
+
+        <record id="ka_direct_response_101_o5cquzh" model="marathon.knowledge.article">
+            <field name="name">Direct Response 101</field>
+            <field name="section_id" ref="ks_sales"/>
+            <field name="audience">all</field>
+            <field name="state">published</field>
+            <field name="sequence">120</field>
+            <field name="pdf_filename">direct-response-101-_O5CQUZH.pdf</field>
+            <field name="summary">SOP imported from Salesforce training library</field>
+        </record>
+
+        <record id="ka_double_checking_billing_jslvammz" model="marathon.knowledge.article">
+            <field name="name">Double Checking Billing</field>
+            <field name="section_id" ref="ks_finance"/>
+            <field name="audience">finance</field>
+            <field name="state">published</field>
+            <field name="sequence">130</field>
+            <field name="pdf_filename">double-checking-billing-JslVaMmz.pdf</field>
+            <field name="summary">SOP imported from Salesforce training library</field>
+        </record>
+
+        <record id="ka_egnyte_8p2kvwye" model="marathon.knowledge.article">
+            <field name="name">Egnyte</field>
+            <field name="section_id" ref="ks_tools"/>
+            <field name="audience">all</field>
+            <field name="state">published</field>
+            <field name="sequence">140</field>
+            <field name="pdf_filename">egnyte-8p2KvWYe.pdf</field>
+            <field name="summary">SOP imported from Salesforce training library</field>
+        </record>
+
+        <record id="ka_email_etiquette_sdhs77yn" model="marathon.knowledge.article">
+            <field name="name">Email Etiquette</field>
+            <field name="section_id" ref="ks_training"/>
+            <field name="audience">all</field>
+            <field name="state">published</field>
+            <field name="sequence">150</field>
+            <field name="pdf_filename">email-etiquette-Sdhs77YN.pdf</field>
+            <field name="summary">SOP imported from Salesforce training library</field>
+        </record>
+
+        <record id="ka_emt_upload_jzuxa3r6" model="marathon.knowledge.article">
+            <field name="name">Emt Upload</field>
+            <field name="section_id" ref="ks_sales"/>
+            <field name="audience">all</field>
+            <field name="state">published</field>
+            <field name="sequence">160</field>
+            <field name="pdf_filename">emt-upload-jzuxA3r6.pdf</field>
+            <field name="summary">SOP imported from Salesforce training library</field>
+        </record>
+
+        <record id="ka_filing_101_deq4ixet" model="marathon.knowledge.article">
+            <field name="name">Filing 101</field>
+            <field name="section_id" ref="ks_tools"/>
+            <field name="audience">all</field>
+            <field name="state">published</field>
+            <field name="sequence">170</field>
+            <field name="pdf_filename">filing-101-DEQ4ixEt.pdf</field>
+            <field name="summary">SOP imported from Salesforce training library</field>
+        </record>
+
+        <record id="ka_getting_started_at_marathon_ventures_uc7" model="marathon.knowledge.article">
+            <field name="name">Getting Started At Marathon Ventures</field>
+            <field name="section_id" ref="ks_training"/>
+            <field name="audience">all</field>
+            <field name="state">published</field>
+            <field name="sequence">180</field>
+            <field name="pdf_filename">getting-started-at-marathon-ventures-uc76B6aL.pdf</field>
+            <field name="summary">SOP imported from Salesforce training library</field>
+        </record>
+
+        <record id="ka_gmail_templates_dqnk4vph" model="marathon.knowledge.article">
+            <field name="name">Gmail Templates</field>
+            <field name="section_id" ref="ks_training"/>
+            <field name="audience">all</field>
+            <field name="state">published</field>
+            <field name="sequence">190</field>
+            <field name="pdf_filename">gmail-templates-dQnk4vPh.pdf</field>
+            <field name="summary">SOP imported from Salesforce training library</field>
+        </record>
+
+        <record id="ka_intro_to_paid_programming_5fbogfnq" model="marathon.knowledge.article">
+            <field name="name">Intro To Paid Programming</field>
+            <field name="section_id" ref="ks_sales"/>
+            <field name="audience">all</field>
+            <field name="state">published</field>
+            <field name="sequence">200</field>
+            <field name="pdf_filename">intro-to-paid-programming-5fbogFNq.pdf</field>
+            <field name="summary">SOP imported from Salesforce training library</field>
+        </record>
+
+        <record id="ka_intro_to_rate_cards_n_9cmu1x" model="marathon.knowledge.article">
+            <field name="name">Intro To Rate Cards N</field>
+            <field name="section_id" ref="ks_sales"/>
+            <field name="audience">all</field>
+            <field name="state">published</field>
+            <field name="sequence">210</field>
+            <field name="pdf_filename">intro-to-rate-cards-n-9CMu1X.pdf</field>
+            <field name="summary">SOP imported from Salesforce training library</field>
+        </record>
+
+        <record id="ka_invoicing_101_networks_badqp3st" model="marathon.knowledge.article">
+            <field name="name">Invoicing 101 Networks</field>
+            <field name="section_id" ref="ks_finance"/>
+            <field name="audience">finance</field>
+            <field name="state">published</field>
+            <field name="sequence">220</field>
+            <field name="pdf_filename">invoicing-101-networks-bAdqp3St.pdf</field>
+            <field name="summary">SOP imported from Salesforce training library</field>
+        </record>
+
+        <record id="ka_invoicing_101_syndicated_bundles_and_pai" model="marathon.knowledge.article">
+            <field name="name">Invoicing 101 Syndicated Bundles And Paid Programming</field>
+            <field name="section_id" ref="ks_finance"/>
+            <field name="audience">finance</field>
+            <field name="state">published</field>
+            <field name="sequence">230</field>
+            <field name="pdf_filename">invoicing-101-syndicated-bundles-and-paid-programming-tWobWTdJ.pdf</field>
+            <field name="summary">SOP imported from Salesforce training library</field>
+        </record>
+
+        <record id="ka_lo_gs_ao_rs_cia_dd4eepma" model="marathon.knowledge.article">
+            <field name="name">Lo Gs Ao Rs Cia</field>
+            <field name="section_id" ref="ks_training"/>
+            <field name="audience">all</field>
+            <field name="state">published</field>
+            <field name="sequence">240</field>
+            <field name="pdf_filename">lo-gs-ao-rs-cia-dD4eePMa.pdf</field>
+            <field name="summary">SOP imported from Salesforce training library</field>
+        </record>
+
+        <record id="ka_netsuite_billing_5wkbqrih" model="marathon.knowledge.article">
+            <field name="name">Netsuite Billing</field>
+            <field name="section_id" ref="ks_finance"/>
+            <field name="audience">finance</field>
+            <field name="state">published</field>
+            <field name="sequence">250</field>
+            <field name="pdf_filename">netsuite-billing-5wkBQRiH.pdf</field>
+            <field name="summary">SOP imported from Salesforce training library</field>
+        </record>
+
+        <record id="ka_netsuite_payment_support_general_grubn4p" model="marathon.knowledge.article">
+            <field name="name">Netsuite Payment Support General</field>
+            <field name="section_id" ref="ks_finance"/>
+            <field name="audience">finance</field>
+            <field name="state">published</field>
+            <field name="sequence">260</field>
+            <field name="pdf_filename">netsuite-payment-support-general-GrUbN4pW.pdf</field>
+            <field name="summary">SOP imported from Salesforce training library</field>
+        </record>
+
+        <record id="ka_netsuite_payment_support_mpocldhb" model="marathon.knowledge.article">
+            <field name="name">Netsuite Payment Support</field>
+            <field name="section_id" ref="ks_finance"/>
+            <field name="audience">finance</field>
+            <field name="state">published</field>
+            <field name="sequence">270</field>
+            <field name="pdf_filename">netsuite-payment-support-mpOCLdHb.pdf</field>
+            <field name="summary">SOP imported from Salesforce training library</field>
+        </record>
+
+        <record id="ka_new_advertiser_brand_requests_6_iizrkg" model="marathon.knowledge.article">
+            <field name="name">New Advertiser Brand Requests 6</field>
+            <field name="section_id" ref="ks_sales"/>
+            <field name="audience">all</field>
+            <field name="state">published</field>
+            <field name="sequence">280</field>
+            <field name="pdf_filename">new-advertiser-brand-requests-6-IIZrkG.pdf</field>
+            <field name="summary">SOP imported from Salesforce training library</field>
+        </record>
+
+        <record id="ka_nosey_dk70gbah" model="marathon.knowledge.article">
+            <field name="name">Nosey</field>
+            <field name="section_id" ref="ks_tools"/>
+            <field name="audience">all</field>
+            <field name="state">published</field>
+            <field name="sequence">290</field>
+            <field name="pdf_filename">nosey-DK70GbaH.pdf</field>
+            <field name="summary">SOP imported from Salesforce training library</field>
+        </record>
+
+        <record id="ka_o_ps_dashboard_b_vtdq4o" model="marathon.knowledge.article">
+            <field name="name">O Ps Dashboard B</field>
+            <field name="section_id" ref="ks_ops"/>
+            <field name="audience">ops</field>
+            <field name="state">published</field>
+            <field name="sequence">300</field>
+            <field name="pdf_filename">o-ps-dashboard-b-vtDq4O.pdf</field>
+            <field name="summary">SOP imported from Salesforce training library</field>
+        </record>
+
+        <record id="ka_onboarding_an_agency_to_emt_ze52us9m" model="marathon.knowledge.article">
+            <field name="name">Onboarding An Agency To Emt</field>
+            <field name="section_id" ref="ks_sales"/>
+            <field name="audience">all</field>
+            <field name="state">published</field>
+            <field name="sequence">310</field>
+            <field name="pdf_filename">onboarding-an-agency-to-emt-ZE52uS9m.pdf</field>
+            <field name="summary">SOP imported from Salesforce training library</field>
+        </record>
+
+        <record id="ka_ops_protocols_ob18oq7h" model="marathon.knowledge.article">
+            <field name="name">Ops Protocols</field>
+            <field name="section_id" ref="ks_ops"/>
+            <field name="audience">ops</field>
+            <field name="state">published</field>
+            <field name="sequence">320</field>
+            <field name="pdf_filename">ops-protocols-ob18Oq7h.pdf</field>
+            <field name="summary">SOP imported from Salesforce training library</field>
+        </record>
+
+        <record id="ka_order_confirmations_2hwdqzex" model="marathon.knowledge.article">
+            <field name="name">Order Confirmations</field>
+            <field name="section_id" ref="ks_sales"/>
+            <field name="audience">all</field>
+            <field name="state">published</field>
+            <field name="sequence">330</field>
+            <field name="pdf_filename">order-confirmations-2HWdQZEx.pdf</field>
+            <field name="summary">SOP imported from Salesforce training library</field>
+        </record>
+
+        <record id="ka_po_upload_e3epwglw" model="marathon.knowledge.article">
+            <field name="name">Po Upload</field>
+            <field name="section_id" ref="ks_sales"/>
+            <field name="audience">all</field>
+            <field name="state">published</field>
+            <field name="sequence">340</field>
+            <field name="pdf_filename">po-upload-e3EpWGLW.pdf</field>
+            <field name="summary">SOP imported from Salesforce training library</field>
+        </record>
+
+        <record id="ka_postlog_process_fijyedsb" model="marathon.knowledge.article">
+            <field name="name">Postlog Process</field>
+            <field name="section_id" ref="ks_ops"/>
+            <field name="audience">ops</field>
+            <field name="state">published</field>
+            <field name="sequence">350</field>
+            <field name="pdf_filename">postlog-process-fijYedSb.pdf</field>
+            <field name="summary">SOP imported from Salesforce training library</field>
+        </record>
+
+        <record id="ka_prelog_dashboard_fpi_rvu4" model="marathon.knowledge.article">
+            <field name="name">Prelog Dashboard</field>
+            <field name="section_id" ref="ks_ops"/>
+            <field name="audience">ops</field>
+            <field name="state">published</field>
+            <field name="sequence">360</field>
+            <field name="pdf_filename">prelog-dashboard-fpI_Rvu4.pdf</field>
+            <field name="summary">SOP imported from Salesforce training library</field>
+        </record>
+
+        <record id="ka_prelog_postlog_comparison_zsh_v31g" model="marathon.knowledge.article">
+            <field name="name">Prelog Postlog Comparison Zsh V31g</field>
+            <field name="section_id" ref="ks_ops"/>
+            <field name="audience">ops</field>
+            <field name="state">published</field>
+            <field name="sequence">370</field>
+            <field name="pdf_filename">prelog-postlog-comparison-ZsH-v31G.pdf</field>
+            <field name="summary">SOP imported from Salesforce training library</field>
+        </record>
+
+        <record id="ka_prelog_removal_process_mxbtu45y" model="marathon.knowledge.article">
+            <field name="name">Prelog Removal Process</field>
+            <field name="section_id" ref="ks_ops"/>
+            <field name="audience">ops</field>
+            <field name="state">published</field>
+            <field name="sequence">380</field>
+            <field name="pdf_filename">prelog-removal-process-mxBtu45Y.pdf</field>
+            <field name="summary">SOP imported from Salesforce training library</field>
+        </record>
+
+        <record id="ka_quarterly_dashboard_obj1mwhk" model="marathon.knowledge.article">
+            <field name="name">Quarterly Dashboard</field>
+            <field name="section_id" ref="ks_ops"/>
+            <field name="audience">ops</field>
+            <field name="state">published</field>
+            <field name="sequence">390</field>
+            <field name="pdf_filename">quarterly-dashboard-oBj1mwHk.pdf</field>
+            <field name="summary">SOP imported from Salesforce training library</field>
+        </record>
+
+        <record id="ka_salesforce_credit_memo_38aj7fft" model="marathon.knowledge.article">
+            <field name="name">Salesforce Credit Memo</field>
+            <field name="section_id" ref="ks_finance"/>
+            <field name="audience">finance</field>
+            <field name="state">published</field>
+            <field name="sequence">400</field>
+            <field name="pdf_filename">salesforce-credit-memo-38AJ7FfT.pdf</field>
+            <field name="summary">SOP imported from Salesforce training library</field>
+        </record>
+
+        <record id="ka_salesforce_requests_9jxb_0bm" model="marathon.knowledge.article">
+            <field name="name">Salesforce Requests 9jxb 0bm</field>
+            <field name="section_id" ref="ks_sales"/>
+            <field name="audience">all</field>
+            <field name="state">published</field>
+            <field name="sequence">410</field>
+            <field name="pdf_filename">salesforce-requests-9JXB-0Bm.pdf</field>
+            <field name="summary">SOP imported from Salesforce training library</field>
+        </record>
+
+        <record id="ka_selling_out_network_inventory_jgxfpgp5" model="marathon.knowledge.article">
+            <field name="name">Selling Out Network Inventory</field>
+            <field name="section_id" ref="ks_sales"/>
+            <field name="audience">all</field>
+            <field name="state">published</field>
+            <field name="sequence">420</field>
+            <field name="pdf_filename">selling-out-network-inventory-JGXfpgP5.pdf</field>
+            <field name="summary">SOP imported from Salesforce training library</field>
+        </record>
+
+        <record id="ka_spot_data_credit_adjustment_before_finan" model="marathon.knowledge.article">
+            <field name="name">Spot Data Credit Adjustment Before Finance Completes Invoicing</field>
+            <field name="section_id" ref="ks_ops"/>
+            <field name="audience">ops</field>
+            <field name="state">published</field>
+            <field name="sequence">430</field>
+            <field name="pdf_filename">spot-data-credit-adjustment-before-finance-completes-invoicing-2n0SEY9u.pdf</field>
+            <field name="summary">SOP imported from Salesforce training library</field>
+        </record>
+
+        <record id="ka_syndication_101_rcr6bz2l" model="marathon.knowledge.article">
+            <field name="name">Syndication 101</field>
+            <field name="section_id" ref="ks_sales"/>
+            <field name="audience">all</field>
+            <field name="state">published</field>
+            <field name="sequence">440</field>
+            <field name="pdf_filename">syndication-101-rcr6BZ2L.pdf</field>
+            <field name="summary">SOP imported from Salesforce training library</field>
+        </record>
+
+        <record id="ka_tasks_resolution_expectation_bpvd7ju1" model="marathon.knowledge.article">
+            <field name="name">Tasks Resolution Expectation</field>
+            <field name="section_id" ref="ks_sales"/>
+            <field name="audience">all</field>
+            <field name="state">published</field>
+            <field name="sequence">450</field>
+            <field name="pdf_filename">tasks-resolution-expectation-bPVD7ju1.pdf</field>
+            <field name="summary">SOP imported from Salesforce training library</field>
+        </record>
+
+        <record id="ka_updating_broadcast_months_r13wqg9n" model="marathon.knowledge.article">
+            <field name="name">Updating Broadcast Months</field>
+            <field name="section_id" ref="ks_ops"/>
+            <field name="audience">ops</field>
+            <field name="state">published</field>
+            <field name="sequence">460</field>
+            <field name="pdf_filename">updating-broadcast-months-R13WQG9n.pdf</field>
+            <field name="summary">SOP imported from Salesforce training library</field>
+        </record>
+
+        <record id="ka_updating_email_addresses_in_salesforce_b" model="marathon.knowledge.article">
+            <field name="name">Updating Email Addresses In Salesforce</field>
+            <field name="section_id" ref="ks_sales"/>
+            <field name="audience">all</field>
+            <field name="state">published</field>
+            <field name="sequence">470</field>
+            <field name="pdf_filename">updating-email-addresses-in-salesforce-ByE0r6k4.pdf</field>
+            <field name="summary">SOP imported from Salesforce training library</field>
+        </record>
+
+        <record id="ka_voiding_invoices_in_intacct_salesforce_d" model="marathon.knowledge.article">
+            <field name="name">Voiding Invoices In Intacct Salesforce</field>
+            <field name="section_id" ref="ks_finance"/>
+            <field name="audience">finance</field>
+            <field name="state">published</field>
+            <field name="sequence">480</field>
+            <field name="pdf_filename">voiding-invoices-in-intacct-salesforce-dlCr1WQb.pdf</field>
+            <field name="summary">SOP imported from Salesforce training library</field>
+        </record>
+
+        <record id="ka_workplace_communication_basics_22u0pbzi" model="marathon.knowledge.article">
+            <field name="name">Workplace Communication Basics</field>
+            <field name="section_id" ref="ks_training"/>
+            <field name="audience">all</field>
+            <field name="state">published</field>
+            <field name="sequence">490</field>
+            <field name="pdf_filename">workplace-communication-basics-22U0pbZi.pdf</field>
+            <field name="summary">SOP imported from Salesforce training library</field>
+        </record>
+
+    </data>
+</odoo>

@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_marathon_sales_order_tree" model="ir.ui.view">
+        <field name="name">marathon.sales.order.tree</field>
+        <field name="model">marathon.sales.order</field>
+        <field name="arch" type="xml">
+            <list string="Sales Orders">
+                <field name="name"/>
+                <field name="deal_id"/>
+                <field name="advertiser_id"/>
+                <field name="brand_id"/>
+                <field name="order_date"/>
+                <field name="total_amount" sum="Total"/>
+                <field name="state"/>
+                <field name="currency_id" invisible="1"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_marathon_sales_order_form" model="ir.ui.view">
+        <field name="name">marathon.sales.order.form</field>
+        <field name="model">marathon.sales.order</field>
+        <field name="arch" type="xml">
+            <form string="Sales Order">
+                <header>
+                    <button name="action_confirm" type="object"
+                            string="Confirm" invisible="state != 'draft'"
+                            class="btn-primary"/>
+                    <button name="action_create_invoice" type="object"
+                            string="Create Invoice"
+                            invisible="state not in ('confirmed',)"
+                            class="btn-primary"/>
+                    <button name="action_cancel" type="object"
+                            string="Cancel"
+                            invisible="state in ('cancelled','paid')"/>
+                    <field name="state" widget="statusbar"
+                           statusbar_visible="draft,confirmed,invoiced,paid"/>
+                </header>
+                <sheet>
+                    <div class="oe_title"><h1><field name="name" readonly="1"/></h1></div>
+                    <group>
+                        <group>
+                            <field name="quote_id" readonly="1"/>
+                            <field name="deal_id"/>
+                            <field name="advertiser_id"/>
+                            <field name="brand_id"/>
+                            <field name="program_id"/>
+                            <field name="client_account_id"/>
+                            <field name="contact_id"/>
+                        </group>
+                        <group>
+                            <field name="order_date"/>
+                            <field name="currency_id"/>
+                            <field name="total_amount" readonly="1"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Items">
+                            <field name="item_ids">
+                                <list editable="bottom">
+                                    <field name="line_number"/>
+                                    <field name="name"/>
+                                    <field name="description"/>
+                                    <field name="schedule_id"/>
+                                    <field name="quantity"/>
+                                    <field name="unit_price"/>
+                                    <field name="line_total" sum="Total"/>
+                                    <field name="currency_id" invisible="1"/>
+                                </list>
+                            </field>
+                        </page>
+                        <page string="Totals">
+                            <field name="total_id">
+                                <list editable="bottom">
+                                    <field name="sequence" widget="handle"/>
+                                    <field name="name"/>
+                                    <field name="amount"/>
+                                    <field name="currency_id" invisible="1"/>
+                                </list>
+                            </field>
+                        </page>
+                        <page string="Invoices">
+                            <field name="invoice_ids" readonly="1">
+                                <list>
+                                    <field name="name"/>
+                                    <field name="invoice_date"/>
+                                    <field name="total_amount"/>
+                                    <field name="balance_due"/>
+                                    <field name="state"/>
+                                </list>
+                            </field>
+                        </page>
+                        <page string="Notes"><field name="notes" nolabel="1"/></page>
+                    </notebook>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_marathon_sales_order" model="ir.actions.act_window">
+        <field name="name">Sales Orders</field>
+        <field name="res_model">marathon.sales.order</field>
+        <field name="view_mode">list,form</field>
+    </record>
+
+</odoo>

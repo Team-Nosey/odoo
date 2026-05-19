@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_marathon_request_list" model="ir.ui.view">
+        <field name="name">marathon.request.list</field>
+        <field name="model">marathon.request</field>
+        <field name="arch" type="xml">
+            <list decoration-info="state=='new'"
+                  decoration-warning="state=='in_progress'"
+                  decoration-muted="state in ('resolved','cancelled')"
+                  decoration-danger="priority=='2'">
+                <field name="name"/>
+                <field name="subject"/>
+                <field name="request_type"/>
+                <field name="department"/>
+                <field name="requester_id"/>
+                <field name="assignee_id"/>
+                <field name="priority" widget="priority"/>
+                <field name="state" widget="badge"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_marathon_request_form" model="ir.ui.view">
+        <field name="name">marathon.request.form</field>
+        <field name="model">marathon.request</field>
+        <field name="arch" type="xml">
+            <form>
+                <header>
+                    <button name="action_start" type="object" string="Start"
+                            class="oe_highlight" invisible="state != 'new'"/>
+                    <button name="action_block" type="object" string="Block"
+                            invisible="state != 'in_progress'"/>
+                    <button name="action_resolve" type="object" string="Resolve"
+                            class="oe_highlight"
+                            invisible="state in ('resolved','cancelled')"/>
+                    <button name="action_cancel" type="object" string="Cancel"
+                            invisible="state in ('resolved','cancelled')"/>
+                    <button name="action_reopen" type="object" string="Reopen"
+                            invisible="state not in ('resolved','cancelled')"/>
+                    <field name="state" widget="statusbar"/>
+                </header>
+                <sheet>
+                    <div class="oe_title">
+                        <h1><field name="name" readonly="1"/></h1>
+                        <h2><field name="subject" placeholder="Subject..."/></h2>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="request_type"/>
+                            <field name="department"/>
+                            <field name="priority" widget="priority"/>
+                            <field name="laptop_number"
+                                   invisible="request_type != 'laptop_signout'"/>
+                        </group>
+                        <group>
+                            <field name="requester_id"/>
+                            <field name="assignee_id"/>
+                            <field name="due_date"/>
+                            <field name="resolved_date"/>
+                        </group>
+                    </group>
+                    <group>
+                        <group>
+                            <field name="deal_id"/>
+                            <field name="schedule_id"/>
+                            <field name="program_id"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Description"><field name="description"/></page>
+                        <page string="Resolution" invisible="state not in ('resolved','blocked')">
+                            <field name="resolution_notes"/>
+                        </page>
+                    </notebook>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_marathon_request_search" model="ir.ui.view">
+        <field name="name">marathon.request.search</field>
+        <field name="model">marathon.request</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="name"/>
+                <field name="subject"/>
+                <field name="requester_id"/>
+                <field name="assignee_id"/>
+                <filter name="filter_my_requests" string="My Requests"
+                        domain="[('requester_id','=',uid)]"/>
+                <filter name="filter_assigned_to_me" string="Assigned to Me"
+                        domain="[('assignee_id','=',uid)]"/>
+                <filter name="filter_open" string="Open"
+                        domain="[('state','not in',('resolved','cancelled'))]"/>
+                <filter name="filter_urgent" string="Urgent"
+                        domain="[('priority','=','2')]"/>
+                    <filter name="group_state" string="State"
+                            context="{'group_by':'state'}"/>
+                    <filter name="group_dept" string="Department"
+                            context="{'group_by':'department'}"/>
+                    <filter name="group_type" string="Type"
+                            context="{'group_by':'request_type'}"/>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_marathon_request" model="ir.actions.act_window">
+        <field name="name">Requests</field>
+        <field name="res_model">marathon.request</field>
+        <field name="view_mode">list,form</field>
+        <field name="search_view_id" ref="view_marathon_request_search"/>
+    </record>
+
+</odoo>

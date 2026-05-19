@@ -1,0 +1,160 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_marathon_schedule_tree" model="ir.ui.view">
+        <field name="name">marathon.schedule.tree</field>
+        <field name="model">marathon.schedule</field>
+        <field name="arch" type="xml">
+            <list string="Schedules"
+                  decoration-danger="is_cancelled"
+                  decoration-info="is_test"
+                  decoration-warning="is_priority">
+                <field name="name"/>
+                <field name="deal_parent_id"/>
+                <field name="program_id"/>
+                <field name="advertiser_id"/>
+                <field name="week"/>
+                <field name="daypart"/>
+                <field name="days_allowed_summary"/>
+                <field name="start_time" widget="float_time"/>
+                <field name="end_time" widget="float_time"/>
+                <field name="rate"/>
+                <field name="units_available" sum="Units"/>
+                <field name="cap"/>
+                <field name="max_per_day"/>
+                <field name="is_test"/>
+                <field name="is_cancelled"/>
+                <field name="total_dollars" sum="Total $"/>
+                <field name="currency_id" invisible="1"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_marathon_schedule_form" model="ir.ui.view">
+        <field name="name">marathon.schedule.form</field>
+        <field name="model">marathon.schedule</field>
+        <field name="arch" type="xml">
+            <form string="Schedule">
+                <header>
+                    <button name="action_cancel_schedule" type="object"
+                            string="Cancel Schedule"
+                            invisible="is_cancelled"
+                            confirm="Cancel this schedule line?"/>
+                    <button name="action_uncancel_schedule" type="object"
+                            string="Uncancel Schedule"
+                            invisible="not is_cancelled"/>
+                    <button name="action_create_additional_schedules"
+                            type="object" string="Add Additional Weeks"
+                            class="btn-secondary"/>
+                </header>
+                <sheet>
+                    <div class="oe_title">
+                        <h1><field name="display_name" readonly="1"/></h1>
+                        <h3><field name="name" readonly="1"/></h3>
+                    </div>
+                    <group>
+                        <group string="Deal &amp; Week">
+                            <field name="deal_parent_id"/>
+                            <field name="program_id" readonly="1"/>
+                            <field name="advertiser_id" readonly="1"/>
+                            <field name="brand_id" readonly="1"/>
+                            <field name="week"/>
+                            <field name="quarter" readonly="1"/>
+                        </group>
+                        <group string="Pricing &amp; Units">
+                            <field name="rate"/>
+                            <field name="units_available"/>
+                            <field name="cap"/>
+                            <field name="max_per_day"/>
+                            <field name="total_dollars" readonly="1"/>
+                            <field name="dollars_booked" readonly="1"/>
+                            <field name="currency_id" invisible="1"/>
+                        </group>
+                    </group>
+
+                    <group>
+                        <group string="Daypart &amp; Time">
+                            <field name="daypart"/>
+                            <field name="start_time" widget="float_time"/>
+                            <field name="end_time" widget="float_time"/>
+                        </group>
+                        <group string="Days Allowed">
+                            <field name="days_mon"/>
+                            <field name="days_tue"/>
+                            <field name="days_wed"/>
+                            <field name="days_thu"/>
+                            <field name="days_fri"/>
+                            <field name="days_sat"/>
+                            <field name="days_sun"/>
+                            <field name="days_allowed_summary" readonly="1"/>
+                        </group>
+                    </group>
+
+                    <group>
+                        <group string="Flags">
+                            <field name="is_priority"/>
+                            <field name="is_special"/>
+                            <field name="is_test"/>
+                            <field name="is_cancelled"/>
+                            <field name="cancel_date" readonly="1"/>
+                        </group>
+                        <group string="Hiatus">
+                            <field name="hiatus_start"/>
+                            <field name="hiatus_end"/>
+                            <field name="hiatus_time_before" widget="float_time"/>
+                            <field name="hiatus_time_after" widget="float_time"/>
+                        </group>
+                    </group>
+
+                    <notebook>
+                        <page string="Notes">
+                            <field name="notes" nolabel="1"/>
+                        </page>
+                    </notebook>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_marathon_schedule_search" model="ir.ui.view">
+        <field name="name">marathon.schedule.search</field>
+        <field name="model">marathon.schedule</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="name"/>
+                <field name="deal_parent_id"/>
+                <field name="program_id"/>
+                <field name="advertiser_id"/>
+                <field name="brand_id"/>
+                <field name="week"/>
+                <field name="daypart"/>
+                <filter string="Active" name="active" domain="[('is_cancelled','=',False)]"/>
+                <filter string="Cancelled" name="cancelled" domain="[('is_cancelled','=',True)]"/>
+                <filter string="Test" name="test" domain="[('is_test','=',True)]"/>
+                <filter string="Priority" name="priority" domain="[('is_priority','=',True)]"/>
+                <filter string="Special" name="special" domain="[('is_special','=',True)]"/>
+                <separator/>
+                <filter string="Q1" name="q1" domain="[('quarter','=','q1')]"/>
+                <filter string="Q2" name="q2" domain="[('quarter','=','q2')]"/>
+                <filter string="Q3" name="q3" domain="[('quarter','=','q3')]"/>
+                <filter string="Q4" name="q4" domain="[('quarter','=','q4')]"/>
+                <separator/>
+                <filter string="Deal" name="g_deal" context="{'group_by':'deal_parent_id'}"/>
+                <filter string="Program" name="g_prog" context="{'group_by':'program_id'}"/>
+                <filter string="Advertiser" name="g_adv" context="{'group_by':'advertiser_id'}"/>
+                <filter string="Daypart" name="g_dp" context="{'group_by':'daypart'}"/>
+                <filter string="Week" name="g_week" context="{'group_by':'week'}"/>
+                <filter string="Quarter" name="g_q" context="{'group_by':'quarter'}"/>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_marathon_schedule" model="ir.actions.act_window">
+        <field name="name">Schedules</field>
+        <field name="res_model">marathon.schedule</field>
+        <field name="view_mode">list,form</field>
+        <field name="search_view_id" ref="view_marathon_schedule_search"/>
+    </record>
+
+</odoo>

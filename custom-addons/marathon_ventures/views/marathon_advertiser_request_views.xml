@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_marathon_advertiser_request_list" model="ir.ui.view">
+        <field name="name">marathon.advertiser.request.list</field>
+        <field name="model">marathon.advertiser.request</field>
+        <field name="arch" type="xml">
+            <list decoration-success="state=='approved'"
+                  decoration-danger="state=='rejected'">
+                <field name="name"/>
+                <field name="request_kind"/>
+                <field name="requested_advertiser_name"/>
+                <field name="requested_brand_name"/>
+                <field name="agency_id"/>
+                <field name="network_id"/>
+                <field name="ae_id"/>
+                <field name="state" widget="badge"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_marathon_advertiser_request_form" model="ir.ui.view">
+        <field name="name">marathon.advertiser.request.form</field>
+        <field name="model">marathon.advertiser.request</field>
+        <field name="arch" type="xml">
+            <form>
+                <header>
+                    <button name="action_submit" type="object" string="Submit for Approval"
+                            class="oe_highlight" invisible="state != 'draft'"/>
+                    <button name="action_send_to_finance" type="object" string="Send to Finance"
+                            invisible="state != 'pending_approval'"/>
+                    <button name="action_approve" type="object" string="Approve"
+                            class="oe_highlight" invisible="state not in ('finance_review','pending_approval')"/>
+                    <button name="action_reject" type="object" string="Reject"
+                            invisible="state in ('approved','rejected','draft')"/>
+                    <field name="state" widget="statusbar"/>
+                </header>
+                <sheet>
+                    <div class="oe_title">
+                        <h1><field name="name" readonly="1"/></h1>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="request_kind"/>
+                            <field name="requested_advertiser_name"/>
+                            <field name="requested_brand_name"
+                                   invisible="request_kind != 'brand'"
+                                   required="request_kind == 'brand'"/>
+                            <field name="parent_advertiser_id"
+                                   invisible="request_kind != 'brand'"/>
+                            <field name="similar_advertisers_checked"/>
+                            <field name="similar_advertiser_notes"/>
+                        </group>
+                        <group>
+                            <field name="ae_id"/>
+                            <field name="agency_id"/>
+                            <field name="network_id"/>
+                            <field name="sent_to_finance_date" readonly="1"/>
+                            <field name="approver_id" readonly="1"/>
+                            <field name="approval_date" readonly="1"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Questionnaire">
+                            <field name="questionnaire_html"/>
+                            <field name="questionnaire_attachment"
+                                   filename="questionnaire_filename"/>
+                            <field name="questionnaire_filename" invisible="1"/>
+                        </page>
+                        <page string="Outcome" invisible="state not in ('approved','rejected')">
+                            <group>
+                                <field name="advertiser_id" readonly="1"/>
+                                <field name="brand_id" readonly="1"/>
+                                <field name="rejection_reason"
+                                       invisible="state != 'rejected'"/>
+                            </group>
+                        </page>
+                    </notebook>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_marathon_advertiser_request" model="ir.actions.act_window">
+        <field name="name">Advertiser/Brand Requests</field>
+        <field name="res_model">marathon.advertiser.request</field>
+        <field name="view_mode">list,form</field>
+    </record>
+
+</odoo>

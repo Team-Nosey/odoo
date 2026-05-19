@@ -1,0 +1,164 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_marathon_spot_data_tree" model="ir.ui.view">
+        <field name="name">marathon.spot.data.tree</field>
+        <field name="model">marathon.spot.data</field>
+        <field name="arch" type="xml">
+            <list string="Spot Data">
+                <field name="unique_spot"/>
+                <field name="air_date"/>
+                <field name="air_time"/>
+                <field name="program_id"/>
+                <field name="advertiser_id"/>
+                <field name="brand_id"/>
+                <field name="schedule_id"/>
+                <field name="duration"/>
+                <field name="rate"/>
+                <field name="type"/>
+                <field name="locked"/>
+                <field name="currency_id" invisible="1"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_marathon_spot_data_form" model="ir.ui.view">
+        <field name="name">marathon.spot.data.form</field>
+        <field name="model">marathon.spot.data</field>
+        <field name="arch" type="xml">
+            <form string="Spot Data">
+                <sheet>
+                    <div class="oe_title"><h1><field name="unique_spot"/></h1></div>
+                    <group>
+                        <group>
+                            <field name="air_date"/>
+                            <field name="air_time"/>
+                            <field name="duration"/>
+                            <field name="framed_duration"/>
+                            <field name="isci"/>
+                            <field name="title"/>
+                            <field name="series"/>
+                            <field name="pod"/>
+                            <field name="segment"/>
+                        </group>
+                        <group>
+                            <field name="schedule_id"/>
+                            <field name="deal_id" readonly="1"/>
+                            <field name="program_id" readonly="1"/>
+                            <field name="advertiser_id" readonly="1"/>
+                            <field name="brand_id" readonly="1"/>
+                            <field name="split_id"/>
+                            <field name="week" readonly="1"/>
+                            <field name="rate"/>
+                            <field name="currency_id"/>
+                        </group>
+                    </group>
+                    <group>
+                        <group string="Type / Status">
+                            <field name="type"/>
+                            <field name="locked"/>
+                            <field name="main_network"/>
+                            <field name="snowflake_transferred"/>
+                            <field name="removed"/>
+                        </group>
+                        <group string="Metrics">
+                            <field name="estimated_000_primary_demo"/>
+                            <field name="actual_000_primary_demo"/>
+                            <field name="total_000_primary_demo"/>
+                        </group>
+                    </group>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_marathon_spot_data" model="ir.actions.act_window">
+        <field name="name">Spot Data</field>
+        <field name="res_model">marathon.spot.data</field>
+        <field name="view_mode">list,form</field>
+    </record>
+
+    <record id="view_marathon_spot_data_mirror_tree" model="ir.ui.view">
+        <field name="name">marathon.spot.data.mirror.tree</field>
+        <field name="model">marathon.spot.data.mirror</field>
+        <field name="arch" type="xml">
+            <list string="Spot Data Mirror"
+                  decoration-warning="error_reason"
+                  decoration-success="processed">
+                <field name="name"/>
+                <field name="air_date"/>
+                <field name="air_time"/>
+                <field name="advertiser_product"/>
+                <field name="agency"/>
+                <field name="network"/>
+                <field name="rate"/>
+                <field name="processed"/>
+                <field name="error_reason"/>
+                <field name="currency_id" invisible="1"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_marathon_spot_data_mirror_form" model="ir.ui.view">
+        <field name="name">marathon.spot.data.mirror.form</field>
+        <field name="model">marathon.spot.data.mirror</field>
+        <field name="arch" type="xml">
+            <form>
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="name"/>
+                            <field name="air_date"/>
+                            <field name="air_time"/>
+                            <field name="advertiser_product"/>
+                            <field name="agency"/>
+                            <field name="network"/>
+                            <field name="isci"/>
+                            <field name="title"/>
+                            <field name="series"/>
+                            <field name="duration"/>
+                        </group>
+                        <group>
+                            <field name="spot_data_id"/>
+                            <field name="schedule_id"/>
+                            <field name="deal_id"/>
+                            <field name="rate"/>
+                            <field name="currency_id"/>
+                            <field name="processed"/>
+                            <field name="error_reason"/>
+                        </group>
+                    </group>
+                    <group string="Raw Payload">
+                        <field name="raw_payload" nolabel="1"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_marathon_spot_data_mirror" model="ir.actions.act_window">
+        <field name="name">Spot Data Mirror</field>
+        <field name="res_model">marathon.spot.data.mirror</field>
+        <field name="view_mode">list,form</field>
+    </record>
+
+    <record id="view_marathon_spot_data_pi_junction_tree" model="ir.ui.view">
+        <field name="name">marathon.spot.data.pi.junction.tree</field>
+        <field name="model">marathon.spot.data.pi.junction</field>
+        <field name="arch" type="xml">
+            <list string="Spot Data PI Junction" editable="bottom">
+                <field name="spot_data_id"/>
+                <field name="deal_id"/>
+                <field name="notes"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="action_marathon_spot_data_pi_junction" model="ir.actions.act_window">
+        <field name="name">Spot Data PI Junction</field>
+        <field name="res_model">marathon.spot.data.pi.junction</field>
+        <field name="view_mode">list,form</field>
+    </record>
+
+</odoo>

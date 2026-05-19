@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_marathon_brand_tree" model="ir.ui.view">
+        <field name="name">marathon.brand.tree</field>
+        <field name="model">marathon.brand</field>
+        <field name="arch" type="xml">
+            <list string="Brands"
+                  decoration-warning="approval_status == 'pending'"
+                  decoration-danger="approval_status == 'not_approved'">
+                <field name="brand_number"/>
+                <field name="name"/>
+                <field name="advertiser_id"/>
+                <field name="account_id"/>
+                <field name="category"/>
+                <field name="primary_demographic"/>
+                <field name="approval_status"/>
+                <field name="e_i_friendly"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_marathon_brand_form" model="ir.ui.view">
+        <field name="name">marathon.brand.form</field>
+        <field name="model">marathon.brand</field>
+        <field name="arch" type="xml">
+            <form string="Brand">
+                <sheet>
+                    <div class="oe_title">
+                        <h1><field name="name" placeholder="Brand Name"/></h1>
+                        <h3><field name="brand_number" readonly="1"/></h3>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="advertiser_id"/>
+                            <field name="account_id" readonly="1"/>
+                            <field name="category"/>
+                            <field name="primary_demographic"/>
+                            <field name="e_i_friendly"/>
+                        </group>
+                        <group>
+                            <field name="approval_status"/>
+                            <field name="approved_duplicate"/>
+                            <field name="digital_id"/>
+                            <field name="unique_brand_identifier"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Alternate Names">
+                            <field name="alternate_brand_names" nolabel="1"
+                                   placeholder="Comma- or newline-separated list of alternate brand names..."/>
+                        </page>
+                        <page string="Deals">
+                            <field name="deal_ids" readonly="1">
+                                <list>
+                                    <field name="name"/>
+                                    <field name="program_id"/>
+                                    <field name="status"/>
+                                    <field name="sum_of_total_dollars"/>
+                                </list>
+                            </field>
+                        </page>
+                    </notebook>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_marathon_brand_search" model="ir.ui.view">
+        <field name="name">marathon.brand.search</field>
+        <field name="model">marathon.brand</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="name"/>
+                <field name="advertiser_id"/>
+                <field name="brand_number"/>
+                <field name="category"/>
+                <filter string="Approved" name="approved" domain="[('approval_status','=','approved')]"/>
+                <filter string="Pending" name="pending" domain="[('approval_status','=','pending')]"/>
+                <filter string="Not Approved" name="not_approved" domain="[('approval_status','=','not_approved')]"/>
+                <filter string="E/I Friendly" name="ei" domain="[('e_i_friendly','=',True)]"/>
+                <separator/>
+                <filter string="Advertiser" name="g_adv" context="{'group_by':'advertiser_id'}"/>
+                <filter string="Approval Status" name="g_approval" context="{'group_by':'approval_status'}"/>
+                <filter string="Category" name="g_cat" context="{'group_by':'category'}"/>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_marathon_brand" model="ir.actions.act_window">
+        <field name="name">Brands</field>
+        <field name="res_model">marathon.brand</field>
+        <field name="view_mode">list,form</field>
+        <field name="search_view_id" ref="view_marathon_brand_search"/>
+    </record>
+
+</odoo>

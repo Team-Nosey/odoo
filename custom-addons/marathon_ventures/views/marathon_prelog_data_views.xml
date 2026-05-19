@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_marathon_prelog_data_tree" model="ir.ui.view">
+        <field name="name">marathon.prelog.data.tree</field>
+        <field name="model">marathon.prelog.data</field>
+        <field name="arch" type="xml">
+            <list string="Prelog Data">
+                <field name="schedule_id"/>
+                <field name="air_date"/>
+                <field name="advertiser_product"/>
+                <field name="agency"/>
+                <field name="isci"/>
+                <field name="title"/>
+                <field name="duration"/>
+                <field name="rate"/>
+                <field name="locked"/>
+                <field name="removed"/>
+                <field name="version"/>
+                <field name="currency_id" invisible="1"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_marathon_prelog_data_form" model="ir.ui.view">
+        <field name="name">marathon.prelog.data.form</field>
+        <field name="model">marathon.prelog.data</field>
+        <field name="arch" type="xml">
+            <form string="Prelog Data">
+                <sheet>
+                    <group>
+                        <group string="Identity">
+                            <field name="schedule_id"/>
+                            <field name="working_log_id"/>
+                            <field name="prelog_data_mirror_id"/>
+                            <field name="split_id"/>
+                            <field name="version"/>
+                            <field name="current_version"/>
+                            <field name="current_version_rollup"/>
+                            <field name="locked"/>
+                            <field name="locked_working_log"/>
+                            <field name="removed"/>
+                        </group>
+                        <group string="Air">
+                            <field name="air_date"/>
+                            <field name="air_time_hour"/>
+                            <field name="hour_of_day"/>
+                            <field name="day_of_week"/>
+                            <field name="week"/>
+                            <field name="schedule_week"/>
+                            <field name="rate"/>
+                            <field name="currency_id"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Spot Detail">
+                            <group>
+                                <group>
+                                    <field name="advertiser_product"/>
+                                    <field name="agency"/>
+                                    <field name="break_code"/>
+                                    <field name="broadcast_network"/>
+                                    <field name="commercial_type"/>
+                                    <field name="material_description"/>
+                                    <field name="order_product_description"/>
+                                    <field name="title"/>
+                                    <field name="series"/>
+                                </group>
+                                <group>
+                                    <field name="isci"/>
+                                    <field name="framed_duration"/>
+                                    <field name="duration"/>
+                                    <field name="line"/>
+                                    <field name="pod"/>
+                                    <field name="segment"/>
+                                    <field name="schedule_ad_id"/>
+                                    <field name="schedule_length"/>
+                                    <field name="schedule_time"/>
+                                    <field name="time_period"/>
+                                    <field name="type"/>
+                                </group>
+                            </group>
+                        </page>
+                        <page string="Computed / Metrics">
+                            <group>
+                                <group>
+                                    <field name="agency_match_error"/>
+                                    <field name="log_schedule_mismatch"/>
+                                    <field name="main_network"/>
+                                    <field name="snowflake_transferred"/>
+                                </group>
+                                <group>
+                                    <field name="estimated_000_primary_demo"/>
+                                    <field name="actual_000_primary_demo"/>
+                                    <field name="total_000_primary_demo"/>
+                                    <field name="liability_000"/>
+                                    <field name="max_per_day_count"/>
+                                    <field name="prelog_equiv_30"/>
+                                    <field name="total_dollars_earned"/>
+                                </group>
+                            </group>
+                        </page>
+                    </notebook>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_marathon_prelog_data" model="ir.actions.act_window">
+        <field name="name">Prelog Data</field>
+        <field name="res_model">marathon.prelog.data</field>
+        <field name="view_mode">list,form</field>
+    </record>
+
+    <record id="view_marathon_prelog_data_mirror_tree" model="ir.ui.view">
+        <field name="name">marathon.prelog.data.mirror.tree</field>
+        <field name="model">marathon.prelog.data.mirror</field>
+        <field name="arch" type="xml">
+            <list string="Prelog Data Mirror"
+                  decoration-warning="problem"
+                  decoration-info="process_required">
+                <field name="name"/>
+                <field name="air_date"/>
+                <field name="advertiser_product"/>
+                <field name="agency"/>
+                <field name="network"/>
+                <field name="rate"/>
+                <field name="version"/>
+                <field name="problem"/>
+                <field name="process_required"/>
+                <field name="error_reason"/>
+                <field name="currency_id" invisible="1"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="action_marathon_prelog_data_mirror" model="ir.actions.act_window">
+        <field name="name">Prelog Data Mirror</field>
+        <field name="res_model">marathon.prelog.data.mirror</field>
+        <field name="view_mode">list,form</field>
+    </record>
+
+</odoo>

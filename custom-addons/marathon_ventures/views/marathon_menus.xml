@@ -1,0 +1,205 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- Top-level Marathon Ventures menu.
+         Visible to any internal user; record-level permissions are enforced
+         via ir.model.access.csv (group_marathon_user). -->
+    <menuitem id="menu_marathon_root"
+              name="Marathon Ventures"
+              sequence="20"
+              web_icon="marathon_ventures,static/description/icon.png"/>
+
+    <!-- ============== Sales Operations ============== -->
+    <menuitem id="menu_marathon_sales_root"
+              name="Sales Operations"
+              parent="menu_marathon_root"
+              sequence="10"/>
+
+    <menuitem id="menu_marathon_deal"
+              name="Deals"
+              action="action_marathon_deal"
+              parent="menu_marathon_sales_root"
+              sequence="10"/>
+
+    <menuitem id="menu_marathon_schedule"
+              name="Schedules"
+              action="action_marathon_schedule"
+              parent="menu_marathon_sales_root"
+              sequence="20"/>
+
+    <menuitem id="menu_marathon_sales_plan"
+              name="Sales Plans"
+              action="action_marathon_sales_plan"
+              parent="menu_marathon_sales_root"
+              sequence="30"/>
+
+    <menuitem id="menu_marathon_split"
+              name="Splits"
+              action="action_marathon_split"
+              parent="menu_marathon_sales_root"
+              sequence="40"/>
+
+    <!-- ============== Master Data ============== -->
+    <menuitem id="menu_marathon_master_root"
+              name="Master Data"
+              parent="menu_marathon_root"
+              sequence="20"/>
+
+    <menuitem id="menu_marathon_program"
+              name="Programs / Networks"
+              action="action_marathon_program"
+              parent="menu_marathon_master_root"
+              sequence="10"/>
+
+    <menuitem id="menu_marathon_advertiser"
+              name="Advertisers"
+              action="action_marathon_advertiser"
+              parent="menu_marathon_master_root"
+              sequence="20"/>
+
+    <menuitem id="menu_marathon_brand"
+              name="Brands"
+              action="action_marathon_brand"
+              parent="menu_marathon_master_root"
+              sequence="30"/>
+
+    <menuitem id="menu_marathon_station"
+              name="Stations"
+              action="action_marathon_station"
+              parent="menu_marathon_master_root"
+              sequence="40"/>
+
+    <!-- ============== Finance ============== -->
+    <menuitem id="menu_marathon_finance_root"
+              name="Finance"
+              parent="menu_marathon_root"
+              sequence="30"/>
+
+    <menuitem id="menu_marathon_sales_quote"
+              name="Sales Quotes"
+              action="action_marathon_sales_quote"
+              parent="menu_marathon_finance_root"
+              sequence="10"/>
+
+    <menuitem id="menu_marathon_sales_order"
+              name="Sales Orders"
+              action="action_marathon_sales_order"
+              parent="menu_marathon_finance_root"
+              sequence="20"/>
+
+    <menuitem id="menu_marathon_sales_invoice"
+              name="Sales Invoices"
+              action="action_marathon_sales_invoice"
+              parent="menu_marathon_finance_root"
+              sequence="30"/>
+
+    <menuitem id="menu_marathon_check"
+              name="Checks"
+              action="action_marathon_check"
+              parent="menu_marathon_finance_root"
+              sequence="40"/>
+
+    <!-- ============== Operations / Logs ============== -->
+    <menuitem id="menu_marathon_ops_root"
+              name="Operations"
+              parent="menu_marathon_root"
+              sequence="40"/>
+
+    <menuitem id="menu_marathon_spot_data"
+              name="Spot Data"
+              action="action_marathon_spot_data"
+              parent="menu_marathon_ops_root"
+              sequence="10"/>
+
+    <menuitem id="menu_marathon_spot_data_mirror"
+              name="Spot Data Mirror"
+              action="action_marathon_spot_data_mirror"
+              parent="menu_marathon_ops_root"
+              sequence="15"/>
+
+    <menuitem id="menu_marathon_spot_data_pi_junction"
+              name="Spot Data PI Junction"
+              action="action_marathon_spot_data_pi_junction"
+              parent="menu_marathon_ops_root"
+              sequence="17"/>
+
+    <menuitem id="menu_marathon_prelog_data"
+              name="Prelog Data"
+              action="action_marathon_prelog_data"
+              parent="menu_marathon_ops_root"
+              sequence="20"/>
+
+    <menuitem id="menu_marathon_prelog_data_mirror"
+              name="Prelog Data Mirror"
+              action="action_marathon_prelog_data_mirror"
+              parent="menu_marathon_ops_root"
+              sequence="25"/>
+
+    <menuitem id="menu_marathon_working_log"
+              name="Working Logs"
+              action="action_marathon_working_log"
+              parent="menu_marathon_ops_root"
+              sequence="30"/>
+
+    <menuitem id="menu_marathon_traffic"
+              name="Traffic"
+              action="action_marathon_traffic"
+              parent="menu_marathon_ops_root"
+              sequence="40"/>
+
+    <menuitem id="menu_marathon_video_file"
+              name="Video Files"
+              action="action_marathon_video_file"
+              parent="menu_marathon_ops_root"
+              sequence="50"/>
+
+    <menuitem id="menu_marathon_agency_discrepancy_task"
+              name="Agency Discrepancy Tasks"
+              action="action_marathon_agency_discrepancy_task"
+              parent="menu_marathon_ops_root"
+              sequence="60"/>
+
+    <menuitem id="menu_marathon_request"
+              name="Internal Requests"
+              action="action_marathon_request"
+              parent="menu_marathon_ops_root"
+              sequence="70"/>
+
+    <menuitem id="menu_marathon_advertiser_request"
+              name="New Advertiser/Brand Requests"
+              action="action_marathon_advertiser_request"
+              parent="menu_marathon_ops_root"
+              sequence="80"/>
+
+    <!-- ============== Finance: extra ============== -->
+    <menuitem id="menu_marathon_credit_memo"
+              name="Credit Memos (SFCM)"
+              action="action_marathon_credit_memo"
+              parent="menu_marathon_finance_root"
+              sequence="50"/>
+
+    <menuitem id="menu_marathon_credit_application"
+              name="Credit Applications"
+              action="action_marathon_credit_application"
+              parent="menu_marathon_finance_root"
+              sequence="60"/>
+
+    <!-- ============== Knowledge Base ============== -->
+    <menuitem id="menu_marathon_knowledge_root"
+              name="Knowledge Base"
+              parent="menu_marathon_root"
+              sequence="90"/>
+
+    <menuitem id="menu_marathon_knowledge_article"
+              name="Articles"
+              action="action_marathon_knowledge_article"
+              parent="menu_marathon_knowledge_root"
+              sequence="10"/>
+
+    <menuitem id="menu_marathon_knowledge_section"
+              name="Sections"
+              action="action_marathon_knowledge_section"
+              parent="menu_marathon_knowledge_root"
+              sequence="20"/>
+
+</odoo>

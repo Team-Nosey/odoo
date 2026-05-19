@@ -1,0 +1,41 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_marathon_station_user,marathon.station user,model_marathon_station,group_marathon_user,1,1,1,1
+access_marathon_program_user,marathon.program user,model_marathon_program,group_marathon_user,1,1,1,1
+access_marathon_advertiser_user,marathon.advertiser user,model_marathon_advertiser,group_marathon_user,1,1,1,1
+access_marathon_brand_user,marathon.brand user,model_marathon_brand,group_marathon_user,1,1,1,1
+access_marathon_sales_plan_user,marathon.sales.plan user,model_marathon_sales_plan,group_marathon_user,1,1,1,1
+access_marathon_deal_user,marathon.deal user,model_marathon_deal,group_marathon_user,1,1,1,1
+access_marathon_schedule_user,marathon.schedule user,model_marathon_schedule,group_marathon_user,1,1,1,1
+access_marathon_split_user,marathon.split user,model_marathon_split,group_marathon_user,1,1,1,1
+access_marathon_sales_quote_user,marathon.sales.quote user,model_marathon_sales_quote,group_marathon_user,1,1,1,1
+access_marathon_sales_quote_item_user,marathon.sales.quote.item user,model_marathon_sales_quote_item,group_marathon_user,1,1,1,1
+access_marathon_sales_quote_total_user,marathon.sales.quote.total user,model_marathon_sales_quote_total,group_marathon_user,1,1,1,1
+access_marathon_sales_order_user,marathon.sales.order user,model_marathon_sales_order,group_marathon_user,1,1,1,1
+access_marathon_sales_order_item_user,marathon.sales.order.item user,model_marathon_sales_order_item,group_marathon_user,1,1,1,1
+access_marathon_sales_order_total_user,marathon.sales.order.total user,model_marathon_sales_order_total,group_marathon_user,1,1,1,1
+access_marathon_sales_invoice_user,marathon.sales.invoice user,model_marathon_sales_invoice,group_marathon_user,1,1,1,1
+access_marathon_sales_invoice_item_user,marathon.sales.invoice.item user,model_marathon_sales_invoice_item,group_marathon_user,1,1,1,1
+access_marathon_sales_invoice_total_user,marathon.sales.invoice.total user,model_marathon_sales_invoice_total,group_marathon_user,1,1,1,1
+access_marathon_sales_invoice_payment_user,marathon.sales.invoice.payment user,model_marathon_sales_invoice_payment,group_marathon_user,1,1,1,1
+access_marathon_check_user,marathon.check user,model_marathon_check,group_marathon_user,1,1,1,1
+access_marathon_check_detail_user,marathon.check.detail user,model_marathon_check_detail,group_marathon_user,1,1,1,1
+access_marathon_spot_data_user,marathon.spot.data user,model_marathon_spot_data,group_marathon_user,1,1,1,1
+access_marathon_spot_data_mirror_user,marathon.spot.data.mirror user,model_marathon_spot_data_mirror,group_marathon_user,1,1,1,1
+access_marathon_spot_data_pi_junction_user,marathon.spot.data.pi.junction user,model_marathon_spot_data_pi_junction,group_marathon_user,1,1,1,1
+access_marathon_prelog_data_user,marathon.prelog.data user,model_marathon_prelog_data,group_marathon_user,1,1,1,1
+access_marathon_prelog_data_mirror_user,marathon.prelog.data.mirror user,model_marathon_prelog_data_mirror,group_marathon_user,1,1,1,1
+access_marathon_working_log_user,marathon.working.log user,model_marathon_working_log,group_marathon_user,1,1,1,1
+access_marathon_traffic_user,marathon.traffic user,model_marathon_traffic,group_marathon_user,1,1,1,1
+access_marathon_traffic_video_asset_user,marathon.traffic.video.asset user,model_marathon_traffic_video_asset,group_marathon_user,1,1,1,1
+access_marathon_video_file_user,marathon.video.file user,model_marathon_video_file,group_marathon_user,1,1,1,1
+access_marathon_deal_revision_wizard,marathon.deal.revision.wizard,model_marathon_deal_revision_wizard,group_marathon_user,1,1,1,1
+access_marathon_schedule_bulk_wizard,marathon.schedule.bulk.wizard,model_marathon_schedule_bulk_wizard,group_marathon_user,1,1,1,1
+access_marathon_knowledge_section_user,marathon.knowledge.section user,model_marathon_knowledge_section,group_marathon_user,1,1,1,1
+access_marathon_knowledge_article_user,marathon.knowledge.article user,model_marathon_knowledge_article,group_marathon_user,1,1,1,1
+access_marathon_knowledge_tag_user,marathon.knowledge.tag user,model_marathon_knowledge_tag,group_marathon_user,1,1,1,1
+access_marathon_credit_memo_user,marathon.credit.memo user,model_marathon_credit_memo,group_marathon_user,1,1,1,1
+access_marathon_credit_application_user,marathon.credit.application user,model_marathon_credit_application,group_marathon_user,1,1,1,1
+access_marathon_credit_application_reference_user,marathon.credit.application.reference user,model_marathon_credit_application_reference,group_marathon_user,1,1,1,1
+access_marathon_agency_discrepancy_task_user,marathon.agency.discrepancy.task user,model_marathon_agency_discrepancy_task,group_marathon_user,1,1,1,1
+access_marathon_request_user,marathon.request user,model_marathon_request,group_marathon_user,1,1,1,1
+access_marathon_advertiser_request_user,marathon.advertiser.request user,model_marathon_advertiser_request,group_marathon_user,1,1,1,1

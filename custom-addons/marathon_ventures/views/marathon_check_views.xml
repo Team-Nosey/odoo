@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_marathon_check_tree" model="ir.ui.view">
+        <field name="name">marathon.check.tree</field>
+        <field name="model">marathon.check</field>
+        <field name="arch" type="xml">
+            <list string="Checks">
+                <field name="check_number"/>
+                <field name="check_date"/>
+                <field name="program_id"/>
+                <field name="total_dollars" sum="Total"/>
+                <field name="matched_dollars" sum="Matched"/>
+                <field name="unmatched_dollars" sum="Unmatched"/>
+                <field name="currency_id" invisible="1"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_marathon_check_form" model="ir.ui.view">
+        <field name="name">marathon.check.form</field>
+        <field name="model">marathon.check</field>
+        <field name="arch" type="xml">
+            <form string="Check">
+                <sheet>
+                    <div class="oe_title"><h1><field name="check_number"/></h1></div>
+                    <group>
+                        <group>
+                            <field name="check_date"/>
+                            <field name="program_id"/>
+                            <field name="currency_id"/>
+                        </group>
+                        <group>
+                            <field name="total_dollars" readonly="1"/>
+                            <field name="matched_dollars" readonly="1"/>
+                            <field name="unmatched_dollars" readonly="1"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Check Detail">
+                            <field name="detail_ids">
+                                <list editable="bottom"
+                                      decoration-warning="unmatched">
+                                    <field name="schedule_id"/>
+                                    <field name="air_date"/>
+                                    <field name="air_time"/>
+                                    <field name="item_ad_id"/>
+                                    <field name="check_amount"/>
+                                    <field name="net_amount" sum="Net"/>
+                                    <field name="unmatched"/>
+                                    <field name="unmatched_reason"/>
+                                    <field name="currency_id" invisible="1"/>
+                                </list>
+                            </field>
+                        </page>
+                    </notebook>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_marathon_check" model="ir.actions.act_window">
+        <field name="name">Checks</field>
+        <field name="res_model">marathon.check</field>
+        <field name="view_mode">list,form</field>
+    </record>
+
+</odoo>

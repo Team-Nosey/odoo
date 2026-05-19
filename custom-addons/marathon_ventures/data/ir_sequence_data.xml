@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="1">
+
+        <record id="seq_marathon_program" model="ir.sequence">
+            <field name="name">Marathon Program Number</field>
+            <field name="code">marathon.program</field>
+            <field name="prefix">PRG-</field>
+            <field name="padding">5</field>
+            <field name="company_id" eval="False"/>
+        </record>
+
+        <record id="seq_marathon_advertiser" model="ir.sequence">
+            <field name="name">Marathon Advertiser Number</field>
+            <field name="code">marathon.advertiser</field>
+            <field name="prefix">ADV-</field>
+            <field name="padding">5</field>
+            <field name="company_id" eval="False"/>
+        </record>
+
+        <record id="seq_marathon_brand" model="ir.sequence">
+            <field name="name">Marathon Brand Number</field>
+            <field name="code">marathon.brand</field>
+            <field name="prefix">BRD-</field>
+            <field name="padding">5</field>
+            <field name="company_id" eval="False"/>
+        </record>
+
+        <record id="seq_marathon_deal" model="ir.sequence">
+            <field name="name">Marathon Deal Number</field>
+            <field name="code">marathon.deal</field>
+            <field name="prefix">DEAL-</field>
+            <field name="padding">6</field>
+            <field name="company_id" eval="False"/>
+        </record>
+
+        <record id="seq_marathon_schedule" model="ir.sequence">
+            <field name="name">Marathon Schedule Number</field>
+            <field name="code">marathon.schedule</field>
+            <field name="prefix">SCH-</field>
+            <field name="padding">6</field>
+            <field name="company_id" eval="False"/>
+        </record>
+
+        <record id="seq_marathon_sales_quote" model="ir.sequence">
+            <field name="name">Marathon Sales Quote Number</field>
+            <field name="code">marathon.sales.quote</field>
+            <field name="prefix">SQ-</field>
+            <field name="padding">6</field>
+            <field name="company_id" eval="False"/>
+        </record>
+
+        <record id="seq_marathon_sales_order" model="ir.sequence">
+            <field name="name">Marathon Sales Order Number</field>
+            <field name="code">marathon.sales.order</field>
+            <field name="prefix">SO-</field>
+            <field name="padding">6</field>
+            <field name="company_id" eval="False"/>
+        </record>
+
+        <record id="seq_marathon_sales_invoice" model="ir.sequence">
+            <field name="name">Marathon Sales Invoice Number</field>
+            <field name="code">marathon.sales.invoice</field>
+            <field name="prefix">INV-</field>
+            <field name="padding">6</field>
+            <field name="company_id" eval="False"/>
+        </record>
+
+        <record id="seq_marathon_credit_memo" model="ir.sequence">
+            <field name="name">Salesforce Credit Memo Number</field>
+            <field name="code">marathon.credit.memo</field>
+            <field name="prefix">SFCM-</field>
+            <field name="padding">6</field>
+            <field name="company_id" eval="False"/>
+        </record>
+
+        <record id="seq_marathon_credit_application" model="ir.sequence">
+            <field name="name">Credit Application Number</field>
+            <field name="code">marathon.credit.application</field>
+            <field name="prefix">CRA-</field>
+            <field name="padding">6</field>
+            <field name="company_id" eval="False"/>
+        </record>
+
+        <record id="seq_marathon_agency_discrepancy_task" model="ir.sequence">
+            <field name="name">Agency Discrepancy Task Number</field>
+            <field name="code">marathon.agency.discrepancy.task</field>
+            <field name="prefix">ADT-</field>
+            <field name="padding">6</field>
+            <field name="company_id" eval="False"/>
+        </record>
+
+        <record id="seq_marathon_request" model="ir.sequence">
+            <field name="name">Marathon Request Number</field>
+            <field name="code">marathon.request</field>
+            <field name="prefix">REQ-</field>
+            <field name="padding">6</field>
+            <field name="company_id" eval="False"/>
+        </record>
+
+        <record id="seq_marathon_advertiser_request" model="ir.sequence">
+            <field name="name">Advertiser Request Number</field>
+            <field name="code">marathon.advertiser.request</field>
+            <field name="prefix">AREQ-</field>
+            <field name="padding">6</field>
+            <field name="company_id" eval="False"/>
+        </record>
+
+    </data>
+</odoo>

@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_marathon_split_tree" model="ir.ui.view">
+        <field name="name">marathon.split.tree</field>
+        <field name="model">marathon.split</field>
+        <field name="arch" type="xml">
+            <list string="Splits">
+                <field name="name"/>
+                <field name="deal_id"/>
+                <field name="program_id"/>
+                <field name="user_id"/>
+                <field name="role"/>
+                <field name="split_percent"/>
+                <field name="commission_percent"/>
+                <field name="is_active"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_marathon_split_form" model="ir.ui.view">
+        <field name="name">marathon.split.form</field>
+        <field name="model">marathon.split</field>
+        <field name="arch" type="xml">
+            <form string="Split">
+                <sheet>
+                    <div class="oe_title"><h1><field name="name"/></h1></div>
+                    <group>
+                        <group>
+                            <field name="deal_id"/>
+                            <field name="program_id" readonly="1"/>
+                            <field name="user_id"/>
+                            <field name="role"/>
+                            <field name="is_active"/>
+                        </group>
+                        <group>
+                            <field name="split_percent"/>
+                            <field name="commission_percent"/>
+                            <field name="start_date"/>
+                            <field name="end_date"/>
+                        </group>
+                    </group>
+                    <group string="Notes"><field name="notes" nolabel="1"/></group>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_marathon_split" model="ir.actions.act_window">
+        <field name="name">Splits</field>
+        <field name="res_model">marathon.split</field>
+        <field name="view_mode">list,form</field>
+    </record>
+</odoo>

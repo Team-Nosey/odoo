@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_marathon_agency_discrepancy_task_list" model="ir.ui.view">
+        <field name="name">marathon.agency.discrepancy.task.list</field>
+        <field name="model">marathon.agency.discrepancy.task</field>
+        <field name="arch" type="xml">
+            <list decoration-danger="overdue or escalated"
+                  decoration-success="state in ('completed_paid','completed_credited')">
+                <field name="name"/>
+                <field name="deal_id"/>
+                <field name="invoice_id"/>
+                <field name="planner_id"/>
+                <field name="due_date"/>
+                <field name="days_open"/>
+                <field name="overdue"/>
+                <field name="escalated"/>
+                <field name="short_paid_amount" widget="monetary"/>
+                <field name="currency_id" column_invisible="1"/>
+                <field name="state" widget="badge"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_marathon_agency_discrepancy_task_form" model="ir.ui.view">
+        <field name="name">marathon.agency.discrepancy.task.form</field>
+        <field name="model">marathon.agency.discrepancy.task</field>
+        <field name="arch" type="xml">
+            <form>
+                <header>
+                    <button name="action_acknowledge" type="object" string="Acknowledge"
+                            class="oe_highlight" invisible="state != 'new'"/>
+                    <button name="action_start_research" type="object" string="Start Research"
+                            invisible="state != 'acknowledged'"/>
+                    <button name="action_pending_sfcm" type="object" string="SFCM Pending"
+                            invisible="state not in ('acknowledged','researching')"/>
+                    <button name="action_complete_paid" type="object"
+                            string="Close - Agency Pays" class="oe_highlight"
+                            invisible="state in ('completed_paid','completed_credited','cancelled')"/>
+                    <button name="action_complete_credited" type="object"
+                            string="Close - SFCM Created" class="oe_highlight"
+                            invisible="state in ('completed_paid','completed_credited','cancelled')"/>
+                    <button name="action_reassign" type="object" string="Re-assign"
+                            invisible="not associated_planner_id"/>
+                    <field name="state" widget="statusbar"/>
+                </header>
+                <sheet>
+                    <div class="oe_title">
+                        <h1><field name="name" readonly="1"/></h1>
+                        <div invisible="not escalated"
+                             class="alert alert-danger"
+                             role="alert">
+                            <strong>Escalated:</strong> Task has been open more
+                            than 30 days and Ops Management has been notified.
+                        </div>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="deal_id" required="1"/>
+                            <field name="invoice_id"/>
+                            <field name="agency_id"/>
+                            <field name="advertiser_id"/>
+                            <field name="brand_id"/>
+                            <field name="finance_creator_id"/>
+                            <field name="planner_id" required="1"/>
+                            <field name="associated_planner_id"/>
+                        </group>
+                        <group>
+                            <field name="invoice_total" widget="monetary"/>
+                            <field name="paid_amount" widget="monetary"/>
+                            <field name="short_paid_amount" widget="monetary"/>
+                            <field name="currency_id"/>
+                            <field name="due_date"/>
+                            <field name="days_open"/>
+                            <field name="overdue"/>
+                            <field name="escalated"/>
+                            <field name="weekly_update_due"/>
+                            <field name="finance_notified"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Discrepancy Detail">
+                            <field name="discrepancy_notes"
+                                   placeholder="Why did Finance flag this? Initial summary..."/>
+                            <field name="finance_attachment"
+                                   filename="finance_attachment_filename"/>
+                            <field name="finance_attachment_filename" invisible="1"/>
+                        </page>
+                        <page string="Resolution"
+                              invisible="state not in ('credit_memo_pending','completed_credited')">
+                            <field name="sfcm_id"/>
+                        </page>
+                    </notebook>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_marathon_agency_discrepancy_task_search" model="ir.ui.view">
+        <field name="name">marathon.agency.discrepancy.task.search</field>
+        <field name="model">marathon.agency.discrepancy.task</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="name"/>
+                <field name="deal_id"/>
+                <field name="planner_id"/>
+                <filter name="filter_my" string="My Tasks"
+                        domain="[('planner_id','=',uid)]"/>
+                <filter name="filter_open" string="Open"
+                        domain="[('state','not in',('completed_paid','completed_credited','cancelled'))]"/>
+                <filter name="filter_overdue" string="Overdue"
+                        domain="[('due_date','&lt;',context_today().strftime('%Y-%m-%d')),('state','not in',('completed_paid','completed_credited','cancelled'))]"/>
+                <filter name="filter_escalated" string="Escalated"
+                        domain="[('escalated','=',True)]"/>
+                    <filter name="group_state" string="State"
+                            context="{'group_by':'state'}"/>
+                    <filter name="group_planner" string="Planner"
+                            context="{'group_by':'planner_id'}"/>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_marathon_agency_discrepancy_task" model="ir.actions.act_window">
+        <field name="name">Agency Discrepancy Tasks</field>
+        <field name="res_model">marathon.agency.discrepancy.task</field>
+        <field name="view_mode">list,form</field>
+        <field name="search_view_id" ref="view_marathon_agency_discrepancy_task_search"/>
+    </record>
+
+    <!-- Cron: escalate tasks open >30 days -->
+    <record id="cron_escalate_old_discrepancy_tasks" model="ir.cron">
+        <field name="name">Marathon: Escalate Old Agency Discrepancy Tasks</field>
+        <field name="model_id" ref="model_marathon_agency_discrepancy_task"/>
+        <field name="state">code</field>
+        <field name="code">model.cron_escalate_old_tasks()</field>
+        <field name="interval_number">1</field>
+        <field name="interval_type">days</field>
+        <field name="active" eval="True"/>
+    </record>
+
+</odoo>

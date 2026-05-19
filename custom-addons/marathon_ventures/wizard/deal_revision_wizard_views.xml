@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_deal_revision_wizard_form" model="ir.ui.view">
+        <field name="name">marathon.deal.revision.wizard.form</field>
+        <field name="model">marathon.deal.revision.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Deal Revisions">
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="deal_id" readonly="1"/>
+                            <field name="operation" widget="radio"/>
+                        </group>
+                        <group>
+                            <field name="select_all"/>
+                            <field name="currency_id" invisible="1"/>
+                        </group>
+                    </group>
+
+                    <separator string="Select Lines to Update"/>
+                    <field name="schedule_ids">
+                        <list>
+                            <field name="week"/>
+                            <field name="daypart"/>
+                            <field name="days_allowed_summary"/>
+                            <field name="start_time" widget="float_time"/>
+                            <field name="end_time" widget="float_time"/>
+                            <field name="rate"/>
+                            <field name="units_available"/>
+                            <field name="cap"/>
+                            <field name="max_per_day"/>
+                            <field name="is_test"/>
+                            <field name="is_cancelled"/>
+                        </list>
+                    </field>
+
+                    <group>
+                        <group string="Effective Date">
+                            <field name="start_week"
+                                   invisible="operation in ('hiatus','extend')"/>
+                            <field name="extend_to_week"
+                                   invisible="operation != 'extend'"/>
+                            <field name="hiatus_start"
+                                   invisible="operation != 'hiatus'"/>
+                            <field name="hiatus_end"
+                                   invisible="operation != 'hiatus'"/>
+                        </group>
+                        <group string="New Value(s)">
+                            <field name="new_rate"
+                                   invisible="operation != 'rate'"/>
+                            <field name="new_units"
+                                   invisible="operation != 'frequency'"/>
+                            <field name="new_cap"
+                                   invisible="operation != 'cap'"/>
+                            <field name="new_max_per_day"
+                                   invisible="operation != 'max_per_day'"/>
+                            <field name="is_test_value"
+                                   invisible="operation != 'test'"/>
+                            <field name="hiatus_time_before"
+                                   invisible="operation != 'hiatus'"
+                                   widget="float_time"/>
+                            <field name="hiatus_time_after"
+                                   invisible="operation != 'hiatus'"
+                                   widget="float_time"/>
+                        </group>
+                    </group>
+
+                    <group string="Daypart Adjustments"
+                           invisible="operation != 'daypart'">
+                        <group>
+                            <field name="new_daypart"/>
+                            <field name="new_start_time" widget="float_time"/>
+                            <field name="new_end_time" widget="float_time"/>
+                        </group>
+                        <group>
+                            <field name="new_days_mon"/>
+                            <field name="new_days_tue"/>
+                            <field name="new_days_wed"/>
+                            <field name="new_days_thu"/>
+                            <field name="new_days_fri"/>
+                            <field name="new_days_sat"/>
+                            <field name="new_days_sun"/>
+                        </group>
+                    </group>
+
+                </sheet>
+                <footer>
+                    <button name="action_update" type="object" string="Update"
+                            class="btn-primary"/>
+                    <button special="cancel" string="Close" class="btn-secondary"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <!-- Bulk schedule wizard -->
+    <record id="view_schedule_bulk_wizard_form" model="ir.ui.view">
+        <field name="name">marathon.schedule.bulk.wizard.form</field>
+        <field name="model">marathon.schedule.bulk.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Add Additional Schedules">
+                <sheet>
+                    <group>
+                        <field name="deal_id" readonly="1"/>
+                        <field name="template_schedule_id" readonly="1"/>
+                        <field name="additional_weeks"/>
+                    </group>
+                </sheet>
+                <footer>
+                    <button name="action_create" type="object"
+                            string="Create" class="btn-primary"/>
+                    <button special="cancel" string="Cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+</odoo>

@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_marathon_video_file_tree" model="ir.ui.view">
+        <field name="name">marathon.video.file.tree</field>
+        <field name="model">marathon.video.file</field>
+        <field name="arch" type="xml">
+            <list string="Video Files">
+                <field name="name"/>
+                <field name="isci"/>
+                <field name="title"/>
+                <field name="length"/>
+                <field name="advertiser_id"/>
+                <field name="brand_id"/>
+                <field name="upload_date"/>
+                <field name="is_active"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_marathon_video_file_form" model="ir.ui.view">
+        <field name="name">marathon.video.file.form</field>
+        <field name="model">marathon.video.file</field>
+        <field name="arch" type="xml">
+            <form string="Video File">
+                <sheet>
+                    <div class="oe_title"><h1><field name="name"/></h1></div>
+                    <group>
+                        <group>
+                            <field name="isci"/>
+                            <field name="title"/>
+                            <field name="length"/>
+                            <field name="advertiser_id"/>
+                            <field name="brand_id"/>
+                        </group>
+                        <group>
+                            <field name="file_url" widget="url"/>
+                            <field name="file_attachment" filename="name"/>
+                            <field name="file_size_mb"/>
+                            <field name="upload_date"/>
+                            <field name="is_active"/>
+                        </group>
+                    </group>
+                    <group string="Notes"><field name="notes" nolabel="1"/></group>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_marathon_video_file" model="ir.actions.act_window">
+        <field name="name">Video Files</field>
+        <field name="res_model">marathon.video.file</field>
+        <field name="view_mode">list,form</field>
+    </record>
+
+</odoo>
