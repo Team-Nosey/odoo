@@ -25,7 +25,7 @@ Parameters:
     Default: Z0375928R2ZK2ENITB9I
   DomainName:
     Type: String
-    Default: odoo.marathon-ops.com
+    Default: marathon-ops.com
   OdooPort:
     Type: Number
     Default: 8069
