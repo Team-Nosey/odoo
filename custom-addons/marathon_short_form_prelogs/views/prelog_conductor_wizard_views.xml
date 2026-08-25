@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_mv_prelog_conductor_wizard_form" model="ir.ui.view">
+        <field name="name">mv.prelog.conductor.wizard.form</field>
+        <field name="model">mv.prelog.conductor.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Prelog Conductor" create="false" delete="false">
+                <sheet>
+                    <div class="oe_title">
+                        <h1>Prelog Conductor</h1>
+                        <p class="text-muted">
+                            Choose one Network, Week, and Version. Preparing creates one workbook per matching contact; it does not send email.
+                        </p>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="network_id" required="1" options="{'no_create': True, 'no_open': True}"/>
+                            <field name="week_option_id" options="{'no_create': True, 'no_open': True}"/>
+                            <field name="version_option_id" options="{'no_create': True, 'no_open': True}"/>
+                            <field name="week" invisible="1"/>
+                            <field name="version" invisible="1"/>
+                        </group>
+                        <group string="Quick Week">
+                            <button name="action_this_week" string="This Week" type="object" class="btn btn-secondary"/>
+                            <button name="action_next_week" string="Next Week" type="object" class="btn btn-secondary" disabled="not next_week_available"/>
+                            <field name="next_week_available" invisible="1"/>
+                        </group>
+                    </group>
+                    <separator string="Preview"/>
+                    <group col="6">
+                        <field name="matching_prelog_count" readonly="1"/>
+                        <field name="contact_count" readonly="1"/>
+                        <field name="missing_email_count" readonly="1"/>
+                    </group>
+                    <div class="alert alert-warning" role="alert" invisible="not network_id or matching_prelog_count">
+                        No eligible prelog records match the current selection.
+                    </div>
+                    <div class="d-flex gap-2 mt-4">
+                        <button name="action_prepare_emails" string="Prepare Emails" type="object" class="btn-primary"/>
+                    </div>
+                    <field name="week_option_ids" invisible="1"/>
+                    <field name="version_option_ids" invisible="1"/>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_server_open_prelog_conductor" model="ir.actions.server">
+        <field name="name">Prelog Conductor</field>
+        <field name="model_id" ref="model_mv_prelog_conductor_wizard"/>
+        <field name="state">code</field>
+        <field name="code">action = model.action_open_conductor()</field>
+    </record>
+</odoo>

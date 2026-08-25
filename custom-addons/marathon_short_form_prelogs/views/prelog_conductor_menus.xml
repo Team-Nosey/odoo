@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <menuitem id="menu_mv_prelog_conductor" name="Prelog Conductor" parent="marathon_ventures.menu_mv_operations" action="action_server_open_prelog_conductor" sequence="30"/>
+    <menuitem id="menu_mv_prelog_conductor_batches" name="Prelog Conductor Batches" parent="marathon_ventures.menu_mv_operations" action="action_mv_prelog_conductor_batch" sequence="31"/>
+</odoo>
