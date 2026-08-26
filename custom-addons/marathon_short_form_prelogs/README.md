@@ -1,0 +1,35 @@
+# Prelog Conductor
+
+Prelog Conductor prepares contact-specific Short Form prelog workbooks and email drafts from existing Marathon Ventures prelog data.
+
+## Installation
+
+1. Ensure `marathon_ventures` and `mail` are installed.
+2. Update the Apps list and install **Prelog Conductor**.
+3. Confirm the scheduled action **MV — Prelog Conductor** is active.
+
+The addon uses the packaged `short_form_prelog.xlsx` master template and the `openpyxl` version already included in Odoo's Python requirements.
+
+## Use
+
+1. Open **Marathon Ventures → Operations → Prelog Conductor**.
+2. Select one Network. Week and Version offer only combinations with eligible prelog records.
+3. Review the record, contact, and missing-email counts.
+4. Click **Prepare Emails**. This creates a batch and recipient lines; it does not send email.
+5. The scheduled action generates one workbook per contact in the background.
+6. Open the batch to download workbooks, review the subject and body, exclude recipients, retry failures, or regenerate intentionally.
+7. Use **Send All** or select recipient lines and use **Send Selected**. These actions send each message immediately through the configured outgoing mail server and report any delivery attempt that fails.
+
+Contacts without an email still receive a generated workbook on their batch line, but it cannot be sent by email.
+
+## Selection rules
+
+The batch uses one Network, Week, and Version. It includes only prelogs that:
+
+- match that exact selection;
+- are not removed;
+- have a linked contact through the existing schedule and deal records;
+- are not linked to cancelled schedules or deals; and
+- belong to active contacts and accounts.
+
+No version fallback or mixing occurs.
