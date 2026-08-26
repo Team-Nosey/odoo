@@ -281,6 +281,8 @@ class MvReportFilter(models.Model):
         ('<=', 'Less or Equal'),
         ('in', 'In'),
         ('not in', 'Not In'),
+        ('is_null', 'Is Empty'),
+        ('is_set', 'Is Set'),
     ], string='Operator', default='=', required=True)
     value = fields.Char(string='Value',
                         help='Raw value (string, number, true/false, or '

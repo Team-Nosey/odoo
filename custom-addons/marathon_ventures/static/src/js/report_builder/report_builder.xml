@@ -155,6 +155,8 @@
                   <option value="&lt;=" t-att-selected="f.operator === '&lt;=' ? 'selected' : null">≤</option>
                   <option value="in" t-att-selected="f.operator === 'in' ? 'selected' : null">In</option>
                   <option value="not in" t-att-selected="f.operator === 'not in' ? 'selected' : null">Not In</option>
+                  <option value="is_null" t-att-selected="f.operator === 'is_null' ? 'selected' : null">Is Empty</option>
+                  <option value="is_set" t-att-selected="f.operator === 'is_set' ? 'selected' : null">Is Set</option>
                 </select>
                 <!-- Type-aware value input: pick the widget per
                      ttype so the planner enters a valid value the
@@ -162,8 +164,17 @@
                      for boolean/selection, numeric input for
                      numbers, etc.). All variants share the same
                      onFilterValueInput handler, which just stores
-                     ev.target.value verbatim. -->
-                <t t-if="f.ttype === 'date'">
+                     ev.target.value verbatim.
+
+                     Special case: 'is_null' / 'is_set' operators
+                     don't take a value - render a placeholder chip
+                     instead so the row layout stays consistent. -->
+                <t t-if="f.operator === 'is_null' or f.operator === 'is_set'">
+                  <span class="mv-rb__filter-value mv-rb__filter-value--noop">
+                    <t t-esc="f.operator === 'is_null' ? '(blank)' : '(any value)'"/>
+                  </span>
+                </t>
+                <t t-elif="f.ttype === 'date'">
                   <input class="mv-rb__filter-value" type="date"
                          t-att-value="f.value"
                          t-on-input="(ev) => this.onFilterValueInput(f_index, ev)"/>

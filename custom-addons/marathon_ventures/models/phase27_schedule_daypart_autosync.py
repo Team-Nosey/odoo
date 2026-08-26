@@ -21,7 +21,7 @@ Recursion note:
 """
 import logging
 
-from odoo import models, api
+from odoo import models, fields, api
 
 _logger = logging.getLogger(__name__)
 
@@ -30,12 +30,40 @@ class MvSchedulesAutoDaypart(models.Model):
     _name = 'mv.schedules'
     _inherit = 'mv.schedules'
 
+    # Re-declare original_rate with default=False so new schedules
+    # land with NULL instead of the Monetary field's stock 0.0
+    # default. The rate-history capture in write() below is what
+    # populates it later.
+    original_rate = fields.Monetary(
+        string='Original Rate',
+        currency_field='currency_id',
+        default=False,
+    )
+
     # ------------------------------------------------------------------
-    # Create: fill program_daypart when the caller did not set it.
+    # Create: fill program_daypart when the caller did not set it,
+    # and force original_rate to NULL when the caller did not pass
+    # one (Monetary's ORM layer would otherwise coerce it to 0.0).
     # ------------------------------------------------------------------
     @api.model_create_multi
     def create(self, vals_list):
+        explicit_orig = [('original_rate' in v) for v in vals_list]
+
         records = super().create(vals_list)
+
+        ids_to_null = [
+            rec.id
+            for rec, had_explicit in zip(records, explicit_orig)
+            if not had_explicit
+        ]
+        if ids_to_null:
+            self.env.cr.execute(
+                "UPDATE mv_schedules SET original_rate = NULL "
+                "WHERE id = ANY(%s)",
+                (ids_to_null,),
+            )
+            records.invalidate_recordset(['original_rate'])
+
         for rec in records:
             if rec.program_daypart:
                 continue          # caller (e.g. Units Grid save) set it
@@ -44,12 +72,46 @@ class MvSchedulesAutoDaypart(models.Model):
 
     # ------------------------------------------------------------------
     # Write: whenever times change and the caller is not explicitly
-    # setting program_daypart, recompute and store it.
+    # setting program_daypart, recompute and store it. Also snapshots
+    # the pre-change Rate into Original Rate the FIRST time the rate
+    # changes on a schedule (rate-history requirement).
     # ------------------------------------------------------------------
     def write(self, vals):
         times_changed = ('start_time' in vals) or ('end_time' in vals)
         manual_daypart = ('program_daypart' in vals)
+
+        # Rate-history capture: read the current Rate on every record
+        # where original_rate is still empty and the incoming vals is
+        # about to change the rate. We do this BEFORE super() runs so
+        # the pre-change value is available. Stored as {rec.id: old}.
+        pre_rates = {}
+        if 'rate' in vals and 'original_rate' not in vals:
+            try:
+                new_rate = float(vals.get('rate') or 0.0)
+            except (TypeError, ValueError):
+                new_rate = 0.0
+            for rec in self:
+                if rec.original_rate:
+                    continue                    # already frozen
+                try:
+                    cur_rate = float(rec.rate or 0.0)
+                except (TypeError, ValueError):
+                    cur_rate = 0.0
+                if abs(cur_rate - new_rate) > 1e-6:
+                    pre_rates[rec.id] = cur_rate
+
         result = super().write(vals)
+
+        # Second phase: stamp Original Rate = captured pre-change rate.
+        # super() bypasses our override -> no recursion.
+        for rec in self:
+            old = pre_rates.get(rec.id)
+            if old is None:
+                continue
+            if rec.original_rate:                # someone else set it - respect
+                continue
+            super(MvSchedulesAutoDaypart, rec).write({'original_rate': old})
+
         if times_changed and not manual_daypart:
             for rec in self:
                 self._mv_backfill_program_daypart_on(rec)

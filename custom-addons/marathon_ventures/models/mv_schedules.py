@@ -1316,13 +1316,15 @@ class MvSchedules(models.Model):
             # TODO: translate SF formula to Python
             rec.net_total = False
 
-    @api.depends()
+    @api.depends('deal_parent.network_deal_number')
     def _compute_network_deal_number(self):
-        # SF formula (verbatim, may need translation):
+        # SF formula:
         #   Deal_Parent__r.Network_Deal_Number__c
+        # Direct pass-through from the parent deal.
         for rec in self:
-            # TODO: translate SF formula to Python
-            rec.network_deal_number = False
+            rec.network_deal_number = (
+                rec.deal_parent.network_deal_number or False
+            )
 
     @api.depends()
     def _compute_new_filler(self):

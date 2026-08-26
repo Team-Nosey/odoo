@@ -584,6 +584,14 @@ class MvReportFilter(models.Model):
         op = self.operator or '='
         raw = self.value or ''
         ttype = self.field_id.ttype
+        # Value-less operators: 'is_null' (field IS empty / NULL) and
+        # 'is_set' (field IS populated) short-circuit here so numeric
+        # / date / etc. type coercion below never runs on an empty
+        # raw. Maps to Odoo's canonical '=' / '!=' False domain.
+        if op == 'is_null':
+            return (path, '=', False)
+        if op == 'is_set':
+            return (path, '!=', False)
         # Incomplete filter (no value) - skip. Special-case: boolean
         # filters treat '' as False intentionally, so keep them.
         if not raw and ttype != 'boolean':
