@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
-  <!-- Phase 1 — Schedule form: action buttons, Days Allowed widget, totals,
-       Additional Schedules button, statusbar. -->
+  <!-- Phase 1 — Schedule form: Cancel/Uncancel header actions. -->
   <record id="view_mv_schedules_form_phase1" model="ir.ui.view">
     <field name="name">mv.schedules.form.phase1</field>
     <field name="model">mv.schedules</field>
@@ -10,27 +9,15 @@
 
       <xpath expr="//sheet" position="before">
         <header>
+          <button name="action_save_record" type="object" string="Save"
+                  class="btn-primary o_mv_save_btn"/>
           <button name="action_cancel_schedule" type="object" string="Cancel Schedule"
                   class="btn-secondary" invisible="status == 'canceled'"/>
           <button name="action_uncancel_schedule" type="object" string="Uncancel Schedule"
                   class="btn-secondary" invisible="status != 'canceled'"/>
-          <button name="%(marathon_ventures.action_open_additional_schedules_wizard)d"
-                  type="action" string="Additional Schedules…"
-                  class="btn-secondary"
-                  context="{'default_schedule_id': id}"/>
-          <field name="status" widget="statusbar"
-                 statusbar_visible="sold,canceled,sold_unflighted"/>
         </header>
       </xpath>
 
-      <!-- Place a compact summary at the top of the sheet -->
-      <xpath expr="//sheet" position="inside">
-        <group string="Phase 1 Computed">
-          <field name="total_dollars" widget="monetary" readonly="1"/>
-          <field name="equiv_30" readonly="1"/>
-          <field name="currency_id" invisible="1"/>
-        </group>
-      </xpath>
 
     </field>
   </record>

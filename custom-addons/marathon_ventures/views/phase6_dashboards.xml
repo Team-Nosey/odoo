@@ -17,7 +17,7 @@
     <field name="arch" type="xml">
       <graph string="Schedules — Booked $ by Week / Daypart" type="bar" stacked="0">
         <field name="week" type="row" interval="week"/>
-        <field name="daypart" type="col"/>
+        <field name="program_daypart" type="col"/>
         <field name="total_dollars" type="measure"/>
         <field name="units_available" type="measure"/>
         <field name="equiv_30" type="measure"/>
@@ -31,7 +31,7 @@
     <field name="arch" type="xml">
       <pivot string="Schedules — Booked $ Pivot">
         <field name="networks" type="row"/>
-        <field name="daypart" type="row"/>
+        <field name="program_daypart" type="row"/>
         <field name="week" type="col" interval="week"/>
         <field name="total_dollars" type="measure"/>
         <field name="units_available" type="measure"/>
