@@ -148,45 +148,27 @@
               <field name="bundle_start_week"/>
               <field name="bundle_version"/> -->
               <field name="status"/>
-              <field name="quarter"/>
               <field name="tier"/>
               <field name="x_class"/>
               <field name="log_exp_date"/>
-              <field name="ltc_date"/>
               <field name="week_pending"/>
               <field name="hiatus_dates"/>
               <field name="demographics"/>
-              <field name="restricted_programming_dna" widget="many2many_tags"/>
               <field name="agency_deal_number"/>
-              <field name="access_code"/>
-              <field name="estimate"/>
-              <field name="client_code"/>
-              <field name="digital_id"/>
-              <field name="product_code"/>
               <field name="raycom_comments"/>
             </group>
 
             <group string="Pricing / Flags / Computed" colspan="3">
-              <field name="rate"/>
-              <field name="budget_30"/>
-              <field name="max_sep"/>
-              <field name="max_day"/>
-              <field name="year"/>
               <field name="actual_rating_year" readonly="1"/>
               <field name="ratings_year"       readonly="1"/>
               <field name="ratings_quarter"    readonly="1"/>
               <field name="e_i_friendly"/>
-              <field name="priority"/>
               <field name="revised"/>
-              <field name="test_pp"/>
               <field name="schedule_count"       readonly="1"/>
               <field name="total_booked_units"   readonly="1"/>
               <field name="total_booked_dollars" widget="monetary" readonly="1"/>
               <field name="currency_id"          invisible="1"/>
-              <field name="commercial_type"      readonly="1"/>
-              <field name="contact_email"        readonly="1"/>
               <field name="entity_name"          readonly="1"/>
-              <field name="deal_count"           readonly="1"/>
             </group>
           </group>
 
