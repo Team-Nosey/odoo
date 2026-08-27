@@ -708,6 +708,82 @@
     }
 }
 
+.mv-fuzzy__overrun-panel {
+    margin: 0.75rem 0;
+    padding: 0.9rem 1rem;
+    border: 1.5px solid #6f8bd1;
+    border-radius: 10px;
+    background: #fff;
+
+    &-head {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1.25rem;
+        align-items: baseline;
+        margin-bottom: 0.5rem;
+    }
+
+    &-title {
+        color: #c46a2f;
+        font-weight: 800;
+        font-size: 0.95rem;
+    }
+
+    &-stat {
+        color: #4d5763;
+        font-size: 0.85rem;
+        strong { color: #273348; margin-left: 0.25rem; }
+    }
+
+    &-foot {
+        margin-top: 0.4rem;
+        text-align: right;
+    }
+}
+
+.mv-fuzzy__overrun-list {
+    list-style: none;
+    margin: 0.2rem 0 0.3rem;
+    padding: 0;
+    font-size: 0.82rem;
+    color: #2a4bb5;
+
+    li {
+        display: flex;
+        justify-content: space-between;
+        padding: 0.1rem 0;
+    }
+}
+
+.mv-fuzzy__linklike {
+    background: none;
+    border: none;
+    color: #2a4bb5;
+    padding: 0;
+    font-size: 0.82rem;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.mv-fuzzy__overrun-badge {
+    display: inline-block;
+    margin-left: 0.35rem;
+    padding: 1px 6px;
+    border-radius: 8px;
+    background: #dc3545;
+    color: #fff;
+    font-size: 0.7rem;
+    font-weight: 700;
+    line-height: 1.3;
+    vertical-align: middle;
+}
+
+.mv-fuzzy__status--overrun {
+    background: #ffe1cf !important;
+    color: #b3541e !important;
+    border: 1px solid #d9895b;
+}
+
 @media (max-width: 900px) {
     .mv-fuzzy {
         &__searchbar { align-items: stretch; flex-direction: column; }

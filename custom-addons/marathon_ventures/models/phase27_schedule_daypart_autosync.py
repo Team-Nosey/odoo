@@ -40,6 +40,40 @@ class MvSchedulesAutoDaypart(models.Model):
         default=False,
     )
 
+    # Tracks whether original_rate has ever been populated with a real
+    # snapshot. Kept separate from the Monetary value because Monetary's
+    # DB representation cannot distinguish NULL from 0.00 once you go
+    # through the ORM write path. Set True by:
+    #   - explicit write on original_rate (see write() below)
+    #   - the rate-history snapshot in write()
+    # Never reset to False by application code once True (business rule:
+    # Original Rate is immutable once frozen).
+    original_rate_has_value = fields.Boolean(
+        string='Original Rate Set',
+        default=False,
+        copy=False,
+    )
+
+    # Display-only Char surfaced to the form view instead of the raw
+    # Monetary field. Returns '' when has_value is False, otherwise the
+    # formatted currency string. The Monetary widget itself always
+    # renders NULL / 0 as '0.00' on the client - this Char gives us
+    # true "blank when unset" behavior.
+    original_rate_display = fields.Char(
+        string='Original Rate',
+        compute='_compute_original_rate_display',
+        store=False,
+    )
+
+    @api.depends('original_rate', 'original_rate_has_value', 'currency_id')
+    def _compute_original_rate_display(self):
+        for rec in self:
+            if not rec.original_rate_has_value:
+                rec.original_rate_display = ''
+                continue
+            symbol = (rec.currency_id and rec.currency_id.symbol) or ''
+            rec.original_rate_display = f"{symbol}{(rec.original_rate or 0.0):,.2f}"
+
     # ------------------------------------------------------------------
     # Create: fill program_daypart when the caller did not set it,
     # and force original_rate to NULL when the caller did not pass
@@ -48,6 +82,13 @@ class MvSchedulesAutoDaypart(models.Model):
     @api.model_create_multi
     def create(self, vals_list):
         explicit_orig = [('original_rate' in v) for v in vals_list]
+        # Stamp has_value when the caller sent a real original_rate
+        # in via vals (so imports / dataloader flows keep the flag
+        # honest). Truthiness match ('is not None' + non-zero) mirrors
+        # the "0.0 == blank" convention we already use elsewhere.
+        for vals, had_explicit in zip(vals_list, explicit_orig):
+            if had_explicit and vals.get('original_rate'):
+                vals.setdefault('original_rate_has_value', True)
 
         records = super().create(vals_list)
 
@@ -80,6 +121,16 @@ class MvSchedulesAutoDaypart(models.Model):
         times_changed = ('start_time' in vals) or ('end_time' in vals)
         manual_daypart = ('program_daypart' in vals)
 
+        # Explicit write on original_rate: keep has_value in sync. If
+        # the caller stamps a real value, set the flag; if they set
+        # False/0, do NOT touch the flag (immutable once set).
+        if (
+            'original_rate' in vals
+            and vals.get('original_rate')
+            and 'original_rate_has_value' not in vals
+        ):
+            vals = dict(vals, original_rate_has_value=True)
+
         # Rate-history capture: read the current Rate on every record
         # where original_rate is still empty and the incoming vals is
         # about to change the rate. We do this BEFORE super() runs so
@@ -91,7 +142,7 @@ class MvSchedulesAutoDaypart(models.Model):
             except (TypeError, ValueError):
                 new_rate = 0.0
             for rec in self:
-                if rec.original_rate:
+                if rec.original_rate_has_value:
                     continue                    # already frozen
                 try:
                     cur_rate = float(rec.rate or 0.0)
@@ -108,9 +159,12 @@ class MvSchedulesAutoDaypart(models.Model):
             old = pre_rates.get(rec.id)
             if old is None:
                 continue
-            if rec.original_rate:                # someone else set it - respect
+            if rec.original_rate_has_value:      # someone else set it - respect
                 continue
-            super(MvSchedulesAutoDaypart, rec).write({'original_rate': old})
+            super(MvSchedulesAutoDaypart, rec).write({
+                'original_rate': old,
+                'original_rate_has_value': True,
+            })
 
         if times_changed and not manual_daypart:
             for rec in self:

@@ -123,6 +123,16 @@ class MvPrelogDataFuzzyMatching(models.Model):
         for row, prelog in zip(all_rows, prelogs):
             self._fuzzy_classify_row(row, prelog)
 
+        # PREDICTED OVERRUN pass: rows that are currently just
+        # "suggestion" (not yet attached) still contribute to the
+        # schedule's projected load. If more suggestions target a
+        # schedule than it has remaining capacity, flag the excess as
+        # 'overrun' up-front so the workbench shows the situation
+        # before anyone clicks Attach. Ordering is airdate/id ASC so
+        # the earliest-planned spots keep the seats and the last
+        # suggestions become the overrun.
+        self._fuzzy_flag_suggested_overruns(all_rows, prelogs)
+
         counts = {
             'all': sum(row['status'] != 'removed' for row in all_rows),
             'matched': sum(row['status'] == 'matched' for row in all_rows),
@@ -133,6 +143,7 @@ class MvPrelogDataFuzzyMatching(models.Model):
             'suggestions': sum(row['status'] == 'suggestion' for row in all_rows),
             'no_suggestion': sum(row['status'] == 'no_suggestion' for row in all_rows),
             'removed': sum(row['status'] == 'removed' for row in all_rows),
+            'overruns': sum(row['status'] == 'overrun' for row in all_rows),
         }
         rows = self._fuzzy_filter_workbench_rows(
             all_rows,
@@ -156,6 +167,111 @@ class MvPrelogDataFuzzyMatching(models.Model):
             'page': (offset // limit) + 1 if total else 0,
             'pages': ((total + limit - 1) // limit) if total else 0,
             'counts': counts,
+        }
+
+    @api.model
+    def fuzzy_workbench_overrun_details(
+        self,
+        schedule_id,
+        limit=5,
+        program_id=False,
+        week_start=False,
+        version=False,
+        import_job_id=False,
+    ):
+        """Return the overrun payload for the drawer.
+
+        Args:
+          schedule_id: mv.schedules.id whose overrun context to fetch.
+          limit: how many prelog rows to include in the preview list
+                 (the drawer shows the first N and links to "view all").
+
+        Returns:
+          {
+            'schedule_name': 'A-5170',
+            'capped_units': 3,           # schedule.units_available
+            'attached_count': 4,         # actually-attached prelogs
+            'suggested_count': 0,        # pending suggestions
+            'total_prelogs': 4,          # attached + suggested
+            'overrun_amount': 1,         # max(0, total - cap)
+            'prelogs': [
+                {'id': 42, 'name': 'Pre-0013567',
+                 'air_date': '2026-08-17', 'air_time': '11:23'},
+                ...
+            ],
+            'has_more': True/False,
+          }
+        """
+        self._fuzzy_check_access()
+        try:
+            schedule_id = int(schedule_id)
+        except (TypeError, ValueError):
+            return {}
+        schedule = self.env['mv.schedules'].browse(schedule_id).exists()
+        if not schedule:
+            return {}
+
+        attached = self.search(
+            [('schedule', '=', schedule.id), ('removed', '=', False)],
+            order='id asc',
+        )
+
+        # Pending suggestions: prelogs that could realistically target
+        # this schedule based on the deal-number join key. Restricted
+        # to the same program/week/version so we don't drag in
+        # historical prelogs.
+        deal_number = (
+            schedule.deal_parent.network_deal_number if schedule.deal_parent
+            else ''
+        )
+        pending = self.env['mv.prelog_data']
+        if deal_number:
+            pending_domain = [
+                ('schedule', '=', False),
+                ('removed', '=', False),
+                ('network_deal_number', '=', deal_number),
+            ]
+            if program_id:
+                pending_domain.append(('import_program', '=', self._fuzzy_int(program_id)))
+            if week_start:
+                pending_domain.append(('import_week_value', '=', week_start))
+            if version:
+                pending_domain.append(('version', '=', version))
+            if import_job_id:
+                pending_domain.append(('import_job', '=', self._fuzzy_int(import_job_id)))
+            pending = self.search(pending_domain, order='airdate asc, id asc')
+
+        combined = attached + pending
+        capped = int(schedule.units_available or 0)
+        attached_count = len(attached)
+        pending_count = len(pending)
+        total = attached_count + pending_count
+        overrun = max(0, total - capped)
+
+        preview = combined[: max(limit, 1)]
+        prelog_payload = [
+            {
+                'id': prelog.id,
+                'name': prelog.display_name or '',
+                'air_date': (
+                    fields.Date.to_string(prelog.airdate)
+                    if prelog.airdate else ''
+                ),
+                'air_time': prelog.scheduletime or '',
+                'attached': bool(prelog.schedule),
+            }
+            for prelog in preview
+        ]
+        return {
+            'schedule_id': schedule.id,
+            'schedule_name': schedule.display_name or '',
+            'capped_units': capped,
+            'attached_count': attached_count,
+            'pending_count': pending_count,
+            'total_prelogs': total,
+            'overrun_amount': overrun,
+            'prelogs': prelog_payload,
+            'has_more': total > len(preview),
         }
 
     @api.model
@@ -326,6 +442,7 @@ class MvPrelogDataFuzzyMatching(models.Model):
 
         now = fields.Datetime.now()
         user_name = self.env.user.display_name
+        touched_schedule_ids = set()
         for prelog, schedule, source, previous_schedule in prepared:
             audit_line = _(
                 'Schedule %(schedule)s attached from Prelog Fuzzy Matching / Operations Workbench '
@@ -346,6 +463,7 @@ class MvPrelogDataFuzzyMatching(models.Model):
                     'user': user_name,
                     'date': fields.Datetime.to_string(now),
                 }
+                touched_schedule_ids.add(previous_schedule.id)
             detail = '\n'.join(
                 part
                 for part in (prelog.import_match_detail, audit_line)
@@ -356,6 +474,11 @@ class MvPrelogDataFuzzyMatching(models.Model):
                 'import_match_status': 'matched',
                 'import_match_detail': detail,
             })
+            touched_schedule_ids.add(schedule.id)
+
+        # Overrun recalc for every schedule that gained OR lost a prelog.
+        if touched_schedule_ids:
+            self._recompute_prelog_overruns(touched_schedule_ids)
 
         return {
             'attached': len(prepared),
@@ -385,10 +508,18 @@ class MvPrelogDataFuzzyMatching(models.Model):
         return self._fuzzy_set_removed_records(prelogs, bool(removed))
 
     @api.model
+    def _fuzzy_set_removed_records_recalc_hook(self, touched_ids):
+        # Split out so subclasses/tests can extend without duplicating.
+        if touched_ids:
+            self._recompute_prelog_overruns(touched_ids)
+
+    @api.model
     def _fuzzy_set_removed_records(self, prelogs, removed):
         """Implement remove/unremove for both explicit and all-page actions."""
         now = fields.Datetime.now()
+        touched_schedule_ids = set()
         for prelog in prelogs:
+            previous_schedule_id = prelog.schedule.id if prelog.schedule else False
             previous_schedule = prelog.schedule.display_name if prelog.schedule else ''
             if removed:
                 line = _(
@@ -418,6 +549,12 @@ class MvPrelogDataFuzzyMatching(models.Model):
                 'import_match_status': 'created_without_schedule',
                 'import_match_detail': detail,
             })
+            if previous_schedule_id:
+                touched_schedule_ids.add(previous_schedule_id)
+
+        # Any schedule that lost an attachment needs its overrun recomputed.
+        self._fuzzy_set_removed_records_recalc_hook(touched_schedule_ids)
+
         return {
             'updated': len(prelogs),
             'message': _('%(count)s Prelog row(s) %(action)s.') % {
@@ -541,7 +678,9 @@ class MvPrelogDataFuzzyMatching(models.Model):
         )
         now = fields.Datetime.now()
         detached = 0
+        touched_schedule_ids = set()
         for prelog in prelogs.filtered('schedule'):
+            prev_id = prelog.schedule.id
             line = _(
                 'Schedule %(schedule)s detached in Prelog Operations Workbench '
                 'by %(user)s on %(date)s.'
@@ -557,7 +696,10 @@ class MvPrelogDataFuzzyMatching(models.Model):
                     part for part in (prelog.import_match_detail, line) if part
                 ),
             })
+            touched_schedule_ids.add(prev_id)
             detached += 1
+        if touched_schedule_ids:
+            self._recompute_prelog_overruns(touched_schedule_ids)
         return {
             'updated': detached,
             'message': _('%(count)s schedule(s) detached.') % {'count': detached},
@@ -840,9 +982,87 @@ class MvPrelogDataFuzzyMatching(models.Model):
         return domain
 
     @api.model
+    def _fuzzy_flag_suggested_overruns(self, all_rows, prelogs):
+        """Mark suggested rows as 'overrun' when the target schedule
+        would exceed capacity if every suggestion attached.
+
+        Rules
+        -----
+        - Group rows by their suggested schedule id (only rows still
+          in status 'suggestion' contribute).
+        - Available capacity = schedule.units_available minus rows
+          already attached to that same schedule (they already
+          consume seats).
+        - If len(suggestions_for_schedule) > available_capacity, the
+          LAST N (by index in `prelogs`, which was ordered airdate
+          asc, id asc) become 'overrun'.
+
+        Also updates row['attached'] / row['suggested'] overrun_amount
+        so the Schedule column can render 'A-5170 +N' even for
+        pending suggestions.
+        """
+        Schedule = self.env['mv.schedules']
+        rows_by_prelog_id = {row['id']: row for row in all_rows}
+
+        # Bucket suggested rows by schedule id (preserving prelog order).
+        suggested_bucket = {}
+        for prelog in prelogs:
+            row = rows_by_prelog_id.get(prelog.id)
+            if not row or row['status'] != 'suggestion':
+                continue
+            sug = row.get('suggested')
+            if not sug or not sug.get('id'):
+                continue
+            suggested_bucket.setdefault(sug['id'], []).append(row)
+
+        if not suggested_bucket:
+            return
+
+        # Load schedules in one shot for units_available / attached count.
+        schedules = Schedule.browse(list(suggested_bucket.keys())).exists()
+        for schedule in schedules:
+            cap = int(schedule.units_available or 0)
+            already_attached = int(schedule.prelog_attached_count or 0)
+            available = cap - already_attached
+            bucket = suggested_bucket[schedule.id]
+            excess = len(bucket) - max(available, 0)
+            if excess <= 0:
+                continue
+            # Schedule is over-subscribed: mark EVERY suggestion
+            # targeting it as Overrun so the whole group surfaces
+            # together and the planner reviews them as one batch,
+            # rather than singling out only the "last N" excess rows.
+            reason_text = _(
+                'Schedule %(name)s has %(cap)s unit(s); '
+                '%(pending)s prelog(s) target it - would overrun by '
+                '%(excess)s.'
+            ) % {
+                'name': schedule.display_name or '',
+                'cap': cap,
+                'pending': len(bucket) + already_attached,
+                'excess': excess,
+            }
+            for row in bucket:
+                row['status'] = 'overrun'
+                row['status_label'] = _('Overrun')
+                row['is_overrun'] = True
+                sug = dict(row.get('suggested') or {})
+                sug['overrun_amount'] = max(
+                    int(sug.get('overrun_amount') or 0),
+                    excess,
+                )
+                row['suggested'] = sug
+                row['reason'] = reason_text
+
+    @api.model
     def _fuzzy_classify_row(self, row, prelog):
+        # Overrun takes precedence over Matched: a prelog that
+        # successfully attached to a schedule but whose attachment
+        # exceeds the schedule capacity is Overrun, not Matched.
         if prelog.removed:
             status = 'removed'
+        elif prelog.schedule and prelog.is_overrun:
+            status = 'overrun'
         elif prelog.schedule:
             status = 'matched'
         elif row.get('suggested'):
@@ -853,11 +1073,13 @@ class MvPrelogDataFuzzyMatching(models.Model):
             'status': status,
             'status_label': {
                 'matched': _('Matched'),
+                'overrun': _('Overrun'),
                 'suggestion': _('Fuzzy Suggestion'),
                 'no_suggestion': _('No Suggestion'),
                 'removed': _('Removed'),
             }[status],
             'removed': bool(prelog.removed),
+            'is_overrun': bool(prelog.is_overrun),
             'attached': (
                 self._fuzzy_schedule_payload(prelog.schedule)
                 if prelog.schedule else False
@@ -880,13 +1102,15 @@ class MvPrelogDataFuzzyMatching(models.Model):
         sort_direction='asc',
     ):
         status = status if status in {
-            'all', 'matched', 'unmatched', 'suggestions', 'no_suggestion', 'removed'
+            'all', 'matched', 'unmatched', 'suggestions', 'no_suggestion',
+            'removed', 'overruns',
         } else 'all'
         status_map = {
             'matched': 'matched',
             'suggestions': 'suggestion',
             'no_suggestion': 'no_suggestion',
             'removed': 'removed',
+            'overruns': 'overrun',
         }
         if status == 'all':
             result = [row for row in rows if row['status'] != 'removed']
@@ -1253,7 +1477,7 @@ class MvPrelogDataFuzzyMatching(models.Model):
                     if self._fuzzy_analysis_quality_key(analysis) == winning_key
                 )
             else:
-                reason = self._fuzzy_no_suggestion_reason(analyses)
+                reason = self._fuzzy_no_suggestion_reason(analyses, prelog)
 
         length_mismatch = False
         time_mismatch = False
@@ -1450,7 +1674,7 @@ class MvPrelogDataFuzzyMatching(models.Model):
         return '; '.join(parts) + (('. ' + reason) if reason else '')
 
     @api.model
-    def _fuzzy_no_suggestion_reason(self, analyses):
+    def _fuzzy_no_suggestion_reason(self, analyses, prelog=None):
         if not analyses:
             return _('No schedules found for deal number')
         network_matches = [
@@ -1466,7 +1690,26 @@ class MvPrelogDataFuzzyMatching(models.Model):
             if analysis['rate_match']
         ]
         if not rate_matches:
-            return _('No rate match')
+            # Include actual rates so the user can immediately see the
+            # gap. Candidates that survived the network filter but
+            # failed rate are listed with their (schedule_name, rate).
+            candidate_bits = [
+                '%s=$%.2f' % (
+                    analysis['schedule'].display_name or '?',
+                    analysis['schedule'].rate or 0.0,
+                )
+                for analysis in network_matches[:5]
+            ]
+            prelog_rate = (
+                '$%.2f' % (prelog.rate or 0.0)
+                if prelog is not None else '?'
+            )
+            return _(
+                'No rate match (prelog=%(prelog)s; candidates: %(cands)s)'
+            ) % {
+                'prelog': prelog_rate,
+                'cands': ', '.join(candidate_bits) or '(none)',
+            }
         day_matches = [
             analysis
             for analysis in rate_matches
@@ -1549,6 +1792,8 @@ class MvPrelogDataFuzzyMatching(models.Model):
                 self._fuzzy_selection_label(schedule, 'status')
                 or ''
             ),
+            'overrun_amount': int(schedule.overrun_amount or 0),
+            'units_available': int(schedule.units_available or 0),
         }
 
     # ------------------------------------------------------------------

@@ -62,6 +62,7 @@
             <button t-att-class="state.activeTab === 'suggestions' ? 'active' : ''" t-on-click="() => this.setTab('suggestions')">Fuzzy Suggestions <span t-esc="state.counts.suggestions"/></button>
             <button t-att-class="state.activeTab === 'no_suggestion' ? 'active' : ''" t-on-click="() => this.setTab('no_suggestion')">No Suggestion <span t-esc="state.counts.no_suggestion"/></button>
             <button t-att-class="state.activeTab === 'removed' ? 'active' : ''" t-on-click="() => this.setTab('removed')">Removed <span t-esc="state.counts.removed"/></button>
+            <button t-att-class="state.activeTab === 'overruns' ? 'active' : ''" t-on-click="() => this.setTab('overruns')">Overruns <span t-esc="state.counts.overruns"/></button>
           </nav>
 
           <div class="mv-fuzzy__searchbar">
@@ -152,10 +153,20 @@
                   <td t-esc="row.deal_number"/>
                   <td><span class="mv-fuzzy__advertiser-product" t-att-title="row.advertiser_product" t-esc="row.advertiser_product"/></td>
                   <td>
-                    <a t-if="row.attached" class="mv-fuzzy__record-link" target="_blank" rel="noopener"
-                       t-att-href="scheduleOpenUrl(row.attached)" t-on-click.stop="() => {}" t-esc="row.attached.name"/>
-                    <a t-elif="row.suggested" class="mv-fuzzy__record-link" target="_blank" rel="noopener"
-                       t-att-href="scheduleOpenUrl(row.suggested)" t-on-click.stop="() => {}" t-esc="row.suggested.name"/>
+                    <t t-if="row.attached">
+                      <a class="mv-fuzzy__record-link" target="_blank" rel="noopener"
+                         t-att-href="scheduleOpenUrl(row.attached)" t-on-click.stop="() => {}" t-esc="row.attached.name"/>
+                      <span t-if="row.attached.overrun_amount > 0"
+                            class="mv-fuzzy__overrun-badge"
+                            t-att-title="'Schedule is over capacity by ' + row.attached.overrun_amount + ' unit(s)'">+<t t-esc="row.attached.overrun_amount"/></span>
+                    </t>
+                    <t t-elif="row.suggested">
+                      <a class="mv-fuzzy__record-link" target="_blank" rel="noopener"
+                         t-att-href="scheduleOpenUrl(row.suggested)" t-on-click.stop="() => {}" t-esc="row.suggested.name"/>
+                      <span t-if="row.suggested.overrun_amount > 0"
+                            class="mv-fuzzy__overrun-badge"
+                            t-att-title="'Schedule would overrun by ' + row.suggested.overrun_amount + ' unit(s) if all pending suggestions attach'">+<t t-esc="row.suggested.overrun_amount"/></span>
+                    </t>
                     <span t-else="" class="mv-fuzzy__muted">No suggestion</span>
                     <span class="mv-fuzzy__quality mv-fuzzy__quality--exact" t-if="row.status === 'suggestion' and row.match_quality === 'exact'">Exact</span>
                     <span class="mv-fuzzy__quality mv-fuzzy__quality--fuzzy" t-if="row.status === 'suggestion' and row.match_quality === 'fuzzy'">Fuzzy</span>
@@ -204,6 +215,33 @@
               <dt>Length / Rate</dt><dd><t t-esc="schedule.length"/> · $<t t-esc="formatRate(schedule.rate)"/></dd><dt>Deal #</dt><dd t-esc="schedule.deal_number"/>
             </dl>
             <p class="mv-fuzzy__explanation" t-if="state.drawerRow.explanation"><strong>Why this suggestion:</strong> <t t-esc="state.drawerRow.explanation"/></p>
+          </section>
+
+          <section class="mv-fuzzy__overrun-panel"
+                   t-if="state.drawerRow.is_overrun and state.drawerOverrun">
+            <div class="mv-fuzzy__overrun-panel-head">
+              <span class="mv-fuzzy__overrun-panel-title">Overruns</span>
+              <span class="mv-fuzzy__overrun-panel-stat">
+                Total Prelogs: <strong t-esc="state.drawerOverrun.total_prelogs"/>
+              </span>
+              <span class="mv-fuzzy__overrun-panel-stat">
+                Capped Units: <strong t-esc="state.drawerOverrun.capped_units"/>
+              </span>
+            </div>
+            <ul class="mv-fuzzy__overrun-list">
+              <li t-foreach="state.drawerOverrun.prelogs" t-as="p" t-key="p.id">
+                <span t-esc="p.name"/>
+                <span class="mv-fuzzy__muted">
+                  <t t-esc="p.air_date"/> <t t-esc="p.air_time"/>
+                </span>
+              </li>
+              <li t-if="state.drawerOverrun.prelogs.length === 0"
+                  class="mv-fuzzy__muted">No prelogs attached yet.</li>
+            </ul>
+            <div class="mv-fuzzy__overrun-panel-foot">
+              <button type="button" class="mv-fuzzy__linklike"
+                      t-on-click="() => this.viewAllOverrunPrelogs()">view all</button>
+            </div>
           </section>
 
           <section><h3>Schedule actions</h3>

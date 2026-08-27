@@ -1,0 +1,123 @@
+# -*- coding: utf-8 -*-
+"""Phase 29 - Prelog / Schedule Overrun detection.
+
+An overrun occurs when the number of prelogs attached to a schedule
+exceeds the schedule's `units_available` capacity.
+
+Design:
+  * `mv.schedules.overrun_amount` (Integer, stored) - max(0, attached - cap).
+  * `mv.prelog_data.is_overrun` (Boolean, stored) - True for the LAST N
+    attached prelogs (by ascending id) where N == schedule.overrun_amount.
+    "Last attached" == last-imported == the ones that "caused" the overrun.
+  * Fields are plain (not @api.depends) because the population depends on
+    a schedule-wide count that Odoo can't express cheaply as a dependency
+    graph. Instead every mutation path calls _recompute_prelog_overruns
+    with the affected schedule ids.
+
+Mutation surface hooked from:
+  - mv_prelog_import_job._process_rows            (after CSV import batch)
+  - fuzzy_match_apply                             (attach / replace)
+  - fuzzy_match_detach                            (detach)
+  - _fuzzy_set_removed_records                    (remove / unremove)
+  - fuzzy_workbench_bulk_action                   (permanent delete)
+  - mv.prelog_data.unlink                         (fallback for any other
+                                                    delete path)
+"""
+import logging
+
+from odoo import models, fields, api
+
+_logger = logging.getLogger(__name__)
+
+
+class MvSchedulesOverrun(models.Model):
+    _name = 'mv.schedules'
+    _inherit = 'mv.schedules'
+
+    overrun_amount = fields.Integer(
+        string='Overrun Amount',
+        default=0,
+        help=(
+            'Number of attached prelogs that exceed the schedule\'s '
+            'units_available capacity. Zero when within capacity.'
+        ),
+    )
+    prelog_attached_count = fields.Integer(
+        string='Attached Prelogs',
+        default=0,
+        help='Count of non-removed prelogs currently attached to this schedule.',
+    )
+
+
+class MvPrelogDataOverrun(models.Model):
+    _name = 'mv.prelog_data'
+    _inherit = 'mv.prelog_data'
+
+    is_overrun = fields.Boolean(
+        string='Is Overrun',
+        default=False,
+        help=(
+            'True when this prelog is attached to a schedule whose '
+            'attached count exceeds its units_available. Set by '
+            '_recompute_prelog_overruns based on ascending id order '
+            '(later imports overrun first).'
+        ),
+    )
+
+    # ------------------------------------------------------------------
+    # unlink hook: any delete path (workbench bulk delete, import
+    # replace_existing sweep, manual admin action) funnels through here.
+    # Collect the schedules that lose an attachment BEFORE the delete,
+    # then recompute after.
+    # ------------------------------------------------------------------
+    def unlink(self):
+        sched_ids = set(self.mapped('schedule').ids)
+        res = super().unlink()
+        if sched_ids:
+            self._recompute_prelog_overruns(sched_ids)
+        return res
+
+    # ------------------------------------------------------------------
+    # Core helper. Idempotent - safe to call multiple times.
+    # Callers pass a set/list of schedule ids that MAY have gained or
+    # lost an attached prelog. We recompute each one from scratch.
+    # ------------------------------------------------------------------
+    @api.model
+    def _recompute_prelog_overruns(self, schedule_ids):
+        if not schedule_ids:
+            return
+        Schedule = self.env['mv.schedules']
+        schedules = Schedule.browse(list(schedule_ids)).exists()
+        for schedule in schedules:
+            attached = self.search(
+                [
+                    ('schedule', '=', schedule.id),
+                    ('removed', '=', False),
+                ],
+                order='id asc',
+            )
+            count = len(attached)
+            cap = int(schedule.units_available or 0)
+            overrun = max(0, count - cap)
+
+            # Update schedule aggregates in one shot.
+            sched_vals = {}
+            if schedule.overrun_amount != overrun:
+                sched_vals['overrun_amount'] = overrun
+            if schedule.prelog_attached_count != count:
+                sched_vals['prelog_attached_count'] = count
+            if sched_vals:
+                schedule.sudo().write(sched_vals)
+
+            # Split attached prelogs into within-cap and overrun cohorts.
+            # First `cap` (by id asc) stay matched, remainder are overrun.
+            overrun_recs = attached[-overrun:] if overrun else self.browse()
+            in_cap_recs = attached - overrun_recs
+
+            need_true = overrun_recs.filtered(lambda p: not p.is_overrun)
+            if need_true:
+                need_true.write({'is_overrun': True})
+            need_false = in_cap_recs.filtered(lambda p: p.is_overrun)
+            if need_false:
+                need_false.write({'is_overrun': False})
+        return True

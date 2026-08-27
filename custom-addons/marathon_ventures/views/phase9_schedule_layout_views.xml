@@ -311,6 +311,8 @@
               <field name="orderlinenumber" readonly="0"/>
               <field name="ordernumber" readonly="0"/>
               <field name="original_rate" readonly="0"/>
+              <field name="original_rate_has_value" invisible="1"/>
+              <field name="original_rate_display" readonly="1"/>
               <field name="original_units_preempted" readonly="0"/>
               <field name="overran_units_dynamic" readonly="0"/>
               <field name="overran_units_v1" readonly="0"/>

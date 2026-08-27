@@ -26,7 +26,7 @@ export class MvPrelogFuzzyMatching extends Component {
             timeBufferMinutes: 120,
             filters: { programId: false, weekStart: "", version: false, importJobId: false },
             activeTab: "all",
-            counts: { all: 0, matched: 0, unmatched: 0, suggestions: 0, no_suggestion: 0, removed: 0 },
+            counts: { all: 0, matched: 0, unmatched: 0, suggestions: 0, no_suggestion: 0, removed: 0, overruns: 0 },
             searchTerm: "",
             airDate: "",
             issueFilter: "",
@@ -42,6 +42,7 @@ export class MvPrelogFuzzyMatching extends Component {
             excludedRows: {},
             drawerRow: false,
             manualSchedule: "",
+            drawerOverrun: null,
         });
 
         onWillStart(async () => {
@@ -373,8 +374,58 @@ export class MvPrelogFuzzyMatching extends Component {
     openDrawer(row) {
         this.state.drawerRow = row;
         this.state.manualSchedule = "";
+        this.state.drawerOverrun = null;
+        // For overrun rows, fetch the schedule's overrun context
+        // (total prelogs, capped units, first N prelogs) so the
+        // drawer can render the "Overruns" section shown in the spec.
+        const schedule = row && (row.attached || row.suggested);
+        if (row && row.is_overrun && schedule && schedule.id) {
+            this._loadDrawerOverrun(schedule.id);
+        }
     }
-    closeDrawer() { this.state.drawerRow = false; this.state.manualSchedule = ""; }
+    async _loadDrawerOverrun(scheduleId) {
+        try {
+            const f = this.state.filters;
+            const details = await this.orm.call(
+                "mv.prelog_data",
+                "fuzzy_workbench_overrun_details",
+                [
+                    scheduleId,
+                    5,
+                    f.programId || false,
+                    f.weekStart || false,
+                    f.version || false,
+                    f.importJobId || false,
+                ],
+            );
+            // Only apply if the drawer is still open on the same row.
+            if (this.state.drawerRow) {
+                this.state.drawerOverrun = details || null;
+            }
+        } catch (err) {
+            this.state.drawerOverrun = null;
+        }
+    }
+    closeDrawer() {
+        this.state.drawerRow = false;
+        this.state.manualSchedule = "";
+        this.state.drawerOverrun = null;
+    }
+    async viewAllOverrunPrelogs() {
+        // Close drawer, switch to Overruns tab, and pre-populate the
+        // search bar with the schedule name so the planner sees every
+        // prelog attached to (or targeting) that overrun schedule.
+        const details = this.state.drawerOverrun;
+        this.closeDrawer();
+        if (details && details.schedule_name) {
+            this.state.searchTerm = details.schedule_name;
+        }
+        if (this.state.activeTab !== "overruns") {
+            await this.setTab("overruns");
+        } else {
+            await this._loadResults();
+        }
+    }
 
     async onExport() {
         if (!this._filtersAreValid()) return;
@@ -446,6 +497,7 @@ export class MvPrelogFuzzyMatching extends Component {
             suggestions: "Fuzzy Suggestions",
             no_suggestion: "No Suggestion",
             removed: "Removed",
+            overruns: "Overruns",
         }[this.state.activeTab] || "All";
     }
 

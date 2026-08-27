@@ -198,6 +198,10 @@ class MvPrelogImportJob(models.Model):
         total_rate_amount = 0.0
         matched_rate_amount = 0.0
         unmatched_rate_amount = 0.0
+        # Track schedules that gained an attached prelog during this
+        # batch so we can recompute their overrun_amount exactly once
+        # after the loop instead of per-row.
+        touched_schedule_ids = set()
 
         for row_index, row in enumerate(rows, start=engine._first_data_row_number()):
             vals = False
@@ -215,6 +219,8 @@ class MvPrelogImportJob(models.Model):
                     matched_count += 1
                     matched_rate_amount += rate_value
                     success_rows.append(self._build_success_csv_row(engine, prelog, row, vals))
+                    if prelog.schedule:
+                        touched_schedule_ids.add(prelog.schedule.id)
                 else:
                     unmatched_count += 1
                     unmatched_rate_amount += rate_value
@@ -229,6 +235,15 @@ class MvPrelogImportJob(models.Model):
                         total_rate_amount += float(rate_value or 0.0)
                     except (TypeError, ValueError):
                         pass
+
+        # Overrun recalc: one pass across every schedule that gained
+        # an attached prelog in this batch. Idempotent - handles the
+        # existing_prelogs.unlink() case too because unlink() on
+        # mv.prelog_data already funnels through the same recompute.
+        if touched_schedule_ids:
+            self.env["mv.prelog_data"]._recompute_prelog_overruns(
+                touched_schedule_ids,
+            )
 
         attachments = self._create_result_attachments(
             engine=engine,
