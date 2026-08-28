@@ -102,6 +102,7 @@
         'views/res_users_views.xml',
         'views/additional_schedules_wizard_views.xml',
         'views/phase1_deal_views.xml',
+        'views/res_partner_list_columns.xml',
         'views/phase1_schedules_views.xml',
         'views/phase1_brands_views.xml',
         'views/deal_revisions_wizard_views.xml',

@@ -12,8 +12,11 @@ The OWL client action (see static/src/js/report_builder/) drives the UI
 and talks to RPC methods on mv.report (see phase14_reports_rpc.py).
 """
 import ast
+import logging
 from odoo import models, fields, api, _
 from odoo.exceptions import UserError
+
+_logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------
@@ -137,15 +140,31 @@ class MvReport(models.Model):
 
     def _sync_dynamic_view(self):
         """Build or refresh the ir.ui.view for this report's Run, and
-        return its id. Idempotent - one ir.ui.view row per mv.report."""
+        return its id. Idempotent - one ir.ui.view row per mv.report.
+
+        Robust to stale field references: if a column or sort points
+        to an ir.model.fields row whose `name` is no longer present
+        on the target model (e.g. the field was renamed between SF
+        migration passes), skip it instead of failing view validation.
+        """
         self.ensure_one()
         from odoo.tools import html_escape as _esc
+        # Live field set on the target model - source of truth for what
+        # names Odoo will accept in the generated arch.
+        model_fields = set(self.env[self.model_id.model]._fields.keys())
+
         cols = self.column_ids.sorted('sequence')
         field_lines = []
         for c in cols:
             if not c.field_id:
                 continue
             fname = c.field_id.name
+            if fname not in model_fields:
+                _logger.warning(
+                    "mv.report %s: column '%s' skipped - field not on model %s",
+                    self.id, fname, self.model_id.model,
+                )
+                continue
             label = c.field_label or ''
             if label:
                 field_lines.append(
@@ -154,10 +173,10 @@ class MvReport(models.Model):
             else:
                 field_lines.append('<field name="%s"/>' % fname)
 
-        # default_order from sort ladder
+        # default_order from sort ladder - same stale-field guard.
         order_parts = []
         for s in self.sort_ids.sorted('sequence'):
-            if s.field_id:
+            if s.field_id and s.field_id.name in model_fields:
                 direction = 'desc' if s.direction == 'desc' else 'asc'
                 order_parts.append('%s %s' % (s.field_id.name, direction))
         order_attr = (

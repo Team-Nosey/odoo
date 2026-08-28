@@ -1,0 +1,507 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+  <!--
+    List-view inheritance to expose every SF-migrated res.partner
+    field in the column-picker sidebar on the Contacts / Accounts
+    index page. All fields land with optional="hide" so the default
+    layout is unchanged; users pick which to show or export via the
+    settings icon on the top-right of the list.
+
+    Generated from models/res_partner.py; regenerate by re-running
+    the script that produced this file.
+  -->
+
+  <record id="view_res_partner_mv_tree" model="ir.ui.view">
+    <field name="name">res.partner.mv.tree</field>
+    <field name="model">res.partner</field>
+    <field name="inherit_id" ref="base.view_partner_tree"/>
+    <field name="arch" type="xml">
+      <xpath expr="//list" position="inside">
+          <field name="sf_external_id" optional="hide" string="SF External ID"/>
+          <field name="currency_id" optional="hide" string="Currency"/>
+          <field name="accountsource" optional="hide" string="AccountSource"/>
+          <field name="account_count" optional="hide" string="Account Count"/>
+          <field name="account_type" optional="hide" string="Account Type"/>
+          <field name="agency_approved_to_book" optional="hide" string="Agency Approved to Book"/>
+          <field name="agency_log" optional="hide" string="Letter Of Guarantee"/>
+          <field name="agency_status" optional="hide" string="Agency Status"/>
+          <field name="air_affidavit" optional="hide" string="Air Affidavit"/>
+          <field name="annualrevenue" optional="hide" string="AnnualRevenue"/>
+          <field name="balance" optional="hide" string="Balance"/>
+          <field name="billing_contact" optional="hide" string="Billing Contact"/>
+          <field name="cia_due_date" optional="hide" string="CIA Due Date"/>
+          <field name="cia_invoice_url" optional="hide" string="CIA Invoice URL"/>
+          <field name="cia_month" optional="hide" string="CIA Month"/>
+          <field name="cia" optional="hide" string="CIA"/>
+          <field name="x_class" optional="hide" string="Class"/>
+          <field name="credit_check" optional="hide" string="Credit Check"/>
+          <field name="credit_risk" optional="hide" string="Credit Risk"/>
+          <field name="emt_agency_codes_required" optional="hide" string="EMT Agency Codes Required"/>
+          <field name="emt_code" optional="hide" string="EMT CODE"/>
+          <field name="emerald_ae" optional="hide" string="Emerald AE"/>
+          <field name="finalexpensetotal" optional="hide" string="FinalExpenseTotal"/>
+          <field name="fire2" optional="hide" string="Wolf AE"/>
+          <field name="green_ae" optional="hide" string="Green AE"/>
+          <field name="hold_placed_on_agency_account" optional="hide" string="Hold Placed on Agency Account"/>
+          <field name="inactive" optional="hide" string="Inactive"/>
+          <field name="intacctid" optional="hide" string="Intacct Customer ID"/>
+          <field name="intacct_credit_limit" optional="hide" string="Intacct Credit Limit"/>
+          <field name="intacct_vendor_id" optional="hide" string="Intacct Vendor Id"/>
+          <field name="invoice_date" optional="hide" string="Invoice Date"/>
+          <field name="iscustomerportal" optional="hide" string="IsCustomerPortal"/>
+          <field name="jade_ae" optional="hide" string="Jade AE"/>
+          <field name="jigsaw" optional="hide" string="Jigsaw"/>
+          <field name="log_w_expiration_date" optional="hide" string="Letter Of Guarantee w Expiration Date"/>
+          <field name="last_account_activity" optional="hide" string="Last Account Activity"/>
+          <field name="last_activity" optional="hide" string="Last Activity"/>
+          <field name="last_lf_deal" optional="hide" string="Last LF Deal"/>
+          <field name="last_sf_deal" optional="hide" string="Last SF Deal"/>
+          <field name="lime_ae" optional="hide" string="Lime AE"/>
+          <field name="maple_ae" optional="hide" string="Maple AE"/>
+          <field name="marathon_commission_x" optional="hide" string="Agency Commission %"/>
+          <field name="monitoring" optional="hide" string="Monitoring"/>
+          <field name="netsuite_balance" optional="hide" string="Netsuite Balance"/>
+          <field name="netsuite_customer_id" optional="hide" string="Netsuite Customer ID"/>
+          <field name="netsuite_vendor_id" optional="hide" string="Netsuite Vendor ID"/>
+          <field name="network_commission" optional="hide" string="Network Commission"/>
+          <field name="nosey" optional="hide" string="Nosey Performing Rights Licenses"/>
+          <field name="numberofemployees" optional="hide" string="NumberOfEmployees"/>
+          <field name="oak_ae" optional="hide" string="Oak AE"/>
+          <field name="onyx_ae" optional="hide" string="Onyx AE"/>
+          <field name="operatinghoursid" optional="hide" string="OperatingHoursId"/>
+          <field name="ownership" optional="hide" string="Ownership"/>
+          <field name="panther_ae" optional="hide" string="Panther AE"/>
+          <field name="pine_ae" optional="hide" string="Pine AE"/>
+          <field name="platinum_ae" optional="hide" string="Platinum AE"/>
+          <field name="prelog_agency" optional="hide" string="Prelog Agency"/>
+          <field name="primary_contact" optional="hide" string="Primary Contact"/>
+          <field name="qb_full_name" optional="hide" string="QB Full Name"/>
+          <field name="rating" optional="hide" string="Rating"/>
+          <field name="red_ae" optional="hide" string="Fire AE"/>
+          <field name="region" optional="hide" string="Region"/>
+          <field name="sfssdupecatcher__override_dupecatcher" optional="hide" string="Account Override DupeCatcher"/>
+          <field name="shippingaddress" optional="hide" string="ShippingAddress"/>
+          <field name="sic" optional="hide" string="Sic"/>
+          <field name="sicdesc" optional="hide" string="SicDesc"/>
+          <field name="silver_ae" optional="hide" string="Silver AE"/>
+          <field name="site" optional="hide" string="Site"/>
+          <field name="teal_ae" optional="hide" string="Teal AE"/>
+          <field name="tickersymbol" optional="hide" string="TickerSymbol"/>
+          <field name="tier" optional="hide" string="Tier"/>
+          <field name="x_sf_type" optional="hide" string="SF: Type"/>
+          <field name="weekly_billing" optional="hide" string="Weekly Billing"/>
+          <field name="yellow_ae" optional="hide" string="Yellow AE"/>
+          <field name="zaapit__hierarchy_level" optional="hide" string="Hierarchy Level"/>
+          <field name="aa_lc" optional="hide" string="AA LC"/>
+          <field name="aa_status" optional="hide" string="AA Status"/>
+          <field name="accountid" optional="hide" string="AccountId"/>
+          <field name="accuweatherpostlogweek" optional="hide" string="AccuWeather Post Week"/>
+          <field name="accuweatherprelogweek" optional="hide" string="AccuWeather Prelog Week"/>
+          <field name="accuweather_post_log_url" optional="hide" string="AccuWeather Post Log URL"/>
+          <field name="accuweather_post_logs_date_time" optional="hide" string="AccuWeather Post Logs Date/Time"/>
+          <field name="accuweather_pre_logs_date_time" optional="hide" string="AccuWeather Pre Logs Date/Time"/>
+          <field name="accuweather_prelog_1a_url" optional="hide" string="AccuWeather Prelog 1a URL"/>
+          <field name="accuweather_prelog_url" optional="hide" string="AccuWeather Prelog URL"/>
+          <field name="accuweather_query_postlogs" optional="hide" string="AccuWeather Query Postlogs"/>
+          <field name="accuweather_query_prelogs_nw" optional="hide" string="AccuWeather Query Prelogs NW"/>
+          <field name="accuweather_query_prelogs" optional="hide" string="AccuWeather Query Prelogs"/>
+          <field name="x_sf_contact_agency_status" optional="hide" string="Agency Status (Contact)"/>
+          <field name="antennatv_post_week" optional="hide" string="AntennaTV Post Week"/>
+          <field name="antennatv_pre_log_week" optional="hide" string="AntennaTV PreLog Week"/>
+          <field name="assistantname" optional="hide" string="AssistantName"/>
+          <field name="assistantphone" optional="hide" string="AssistantPhone"/>
+          <field name="bl_lc" optional="hide" string="BL LC"/>
+          <field name="bl_status" optional="hide" string="BL Status"/>
+          <field name="btt_missing_video_url" optional="hide" string="BTT Missing Video URL"/>
+          <field name="btt_pp_postlog_week" optional="hide" string="BTT PP Postlog Week"/>
+          <field name="btt_postlog_url" optional="hide" string="BTT Postlog URL"/>
+          <field name="bustedpostlogweek" optional="hide" string="BUSTEDPostLogWeek"/>
+          <field name="bustedprelogweek" optional="hide" string="BUSTED PreLog Week"/>
+          <field name="busted_post_log_url" optional="hide" string="BUSTED Post Log URL"/>
+          <field name="busted_post_logs_date_time" optional="hide" string="BUSTED Post Logs Date Time"/>
+          <field name="busted_pre_logs_date" optional="hide" string="BUSTED Pre Logs Date"/>
+          <field name="busted_prelog_nw_url" optional="hide" string="BUSTED Prelog NW URL"/>
+          <field name="birthdate" optional="hide" string="Birthdate"/>
+          <field name="blue_ae" optional="hide" string="Blue AE"/>
+          <field name="bouncetv_query_postlogs" optional="hide" string="BounceTV Query Postlogs"/>
+          <field name="bouncetv_query_prelogs_nw" optional="hide" string="BounceTV Query Prelogs NW"/>
+          <field name="bouncetv_query_prelogs" optional="hide" string="BounceTV Query Prelogs"/>
+          <field name="bounce_pp_postlog_url" optional="hide" string="Bounce PP Postlog URL"/>
+          <field name="bounce_pp_postlog_week" optional="hide" string="Bounce PP Postlog Week"/>
+          <field name="bounce_post_log_url" optional="hide" string="Bounce Post Log URL"/>
+          <field name="bounce_post_logs_date_time" optional="hide" string="Bounce Post Logs Date/Time"/>
+          <field name="bounce_post_week" optional="hide" string="Bounce Post Week"/>
+          <field name="bounce_pre_logs_date_time" optional="hide" string="Bounce Pre Logs Date/Time"/>
+          <field name="bounce_prelog_1a_url" optional="hide" string="Bounce Prelog 1a URL"/>
+          <field name="bounce_prelog_url" optional="hide" string="Bounce Prelog URL"/>
+          <field name="bounce_prelog_week" optional="hide" string="Bounce Prelog Week"/>
+          <field name="busted_prelog_url" optional="hide" string="Busted Prelog URL"/>
+          <field name="buyerattributes" optional="hide" string="BuyerAttributes"/>
+          <field name="cj_lc" optional="hide" string="CJ LC"/>
+          <field name="cj_status" optional="hide" string="CJ Status"/>
+          <field name="cl_lc" optional="hide" string="CL LC"/>
+          <field name="cl_status" optional="hide" string="CL Status"/>
+          <field name="call_cycle" optional="hide" string="Call Cycle"/>
+          <field name="canallowportalselfreg" optional="hide" string="CanAllowPortalSelfReg"/>
+          <field name="confesspostlogweek" optional="hide" string="ConfessPostLogWeek"/>
+          <field name="confessprelogweek" optional="hide" string="ConfessPreLogWeek"/>
+          <field name="confess_post_logs_date_time" optional="hide" string="Confess Post Logs Date Time"/>
+          <field name="confess_postlog_url" optional="hide" string="Confess Postlog URL"/>
+          <field name="confess_pre_log_date_time" optional="hide" string="Confess Pre Log Date/Time"/>
+          <field name="confess_prelog_nw_url" optional="hide" string="Confess Prelog NW URL"/>
+          <field name="confess_prelog_url" optional="hide" string="Confess Prelog URL"/>
+          <field name="contactsource" optional="hide" string="ContactSource"/>
+          <field name="courttvpostlogweek" optional="hide" string="CourtTV PostLogWeek"/>
+          <field name="courttvprelogweek" optional="hide" string="CourtTV Prelog Week"/>
+          <field name="courttv_post_logs_date_time" optional="hide" string="CourtTV Post Logs Date/Time"/>
+          <field name="courttv_post_log_url" optional="hide" string="CourtTV Post-log URL"/>
+          <field name="courttv_pre_logs_date_time" optional="hide" string="CourtTV Pre Logs Date/Time"/>
+          <field name="courttv_prelog_nw_url" optional="hide" string="CourtTV Prelog NW URL"/>
+          <field name="courttv_prelog_url" optional="hide" string="CourtTV Prelog URL"/>
+          <field name="courttv_query_postlogs" optional="hide" string="CourtTV Query Postlogs"/>
+          <field name="courttv_query_prelogs_nw" optional="hide" string="CourtTV Query Prelogs NW"/>
+          <field name="courttv_query_prelogs" optional="hide" string="CourtTV Query Prelogs"/>
+          <field name="defyscrippspostlogweek" optional="hide" string="DEFY Scripps Post Log Week"/>
+          <field name="defyscrippsprelogweek" optional="hide" string="DEFY Scripps PreLog Week"/>
+          <field name="defyftvpostlogweek" optional="hide" string="Defy FTV PostLog Week"/>
+          <field name="defyftvprelogweek" optional="hide" string="Defy FTV PreLog Week"/>
+          <field name="defyscrippsprelogdatetime" optional="hide" string="Defy Scripps Prelog DateTime"/>
+          <field name="defy_ftv_post_logs_date_time" optional="hide" string="Defy FTV Post Logs Date/Time"/>
+          <field name="defy_ftv_pre_log_date_time" optional="hide" string="Defy FTV Pre Log Date/Time"/>
+          <field name="defy_ftv_query_postlogs" optional="hide" string="Defy FTV Query Postlogs"/>
+          <field name="defy_ftv_query_prelogs_nw" optional="hide" string="Defy FTV Query Prelogs NW"/>
+          <field name="defy_ftv_query_prelogs" optional="hide" string="Defy FTV Query Prelogs"/>
+          <field name="defy_scripps_post_log_url" optional="hide" string="Defy Scripps Post Log URL"/>
+          <field name="defy_scripps_post_logs_datetime" optional="hide" string="Defy Scripps Post Logs DateTime"/>
+          <field name="defy_scripps_prelog_nw_url" optional="hide" string="Defy Scripps Prelog NW URL"/>
+          <field name="defy_scripps_prelog_url" optional="hide" string="Defy Scripps Prelog URL"/>
+          <field name="defy_scripps_query_post_logs" optional="hide" string="Defy Scripps Query Post Logs"/>
+          <field name="defy_scripps_query_pre_logs_nw" optional="hide" string="Defy Scripps Query Pre Logs NW"/>
+          <field name="defy_scripps_query_pre_logs" optional="hide" string="Defy Scripps Query Pre Logs"/>
+          <field name="department" optional="hide" string="Department"/>
+          <field name="departmentgroup" optional="hide" string="DepartmentGroup"/>
+          <field name="digital_postlog_url" optional="hide" string="Digital Postlog URL"/>
+          <field name="digital_postlog_week" optional="hide" string="Digital Postlog Week"/>
+          <field name="disney_post_log_week" optional="hide" string="Disney Post Log Week"/>
+          <field name="disney_postlog_url" optional="hide" string="Disney Postlog URL"/>
+          <field name="disney_prelog_nw_url" optional="hide" string="Disney Prelog NW URL"/>
+          <field name="disney_prelog_url" optional="hide" string="Disney Prelog URL"/>
+          <field name="disney_prelog_week" optional="hide" string="Disney Prelog Week"/>
+          <field name="donotcall" optional="hide" string="DoNotCall"/>
+          <field name="duplicate_approval" optional="hide" string="Duplicate Approval"/>
+          <field name="eo_lc" optional="hide" string="EO LC"/>
+          <field name="eo_status" optional="hide" string="EO Status"/>
+          <field name="email_logs" optional="hide" string="Email Logs"/>
+          <field name="x_sf_contact_emerald_ae" optional="hide" string="Emerald AE (Contact)"/>
+          <field name="fallow_date" optional="hide" string="Fallow Date"/>
+          <field name="fire_ae_bounce" optional="hide" string="Fire AE (fire_ae_bounce)"/>
+          <field name="fire_ae_escape" optional="hide" string="Wolf AE (fire_ae_escape)"/>
+          <field name="fox_postlog_url" optional="hide" string="Fox Postlog URL"/>
+          <field name="fox_postlog_week" optional="hide" string="Fox Postlog Week"/>
+          <field name="fox_prelog_nw_url" optional="hide" string="Fox Prelog NW URL"/>
+          <field name="fox_prelog_week" optional="hide" string="Fox Prelog Week"/>
+          <field name="fox_synd_prelog_url" optional="hide" string="Fox Synd Prelog URL"/>
+          <field name="gc_lc" optional="hide" string="GC LC"/>
+          <field name="gc_status" optional="hide" string="GC Status"/>
+          <field name="genderidentity" optional="hide" string="GenderIdentity"/>
+          <field name="x_sf_contact_green_ae" optional="hide" string="Green AE (Contact)"/>
+          <field name="green_incumbency_sheet_url" optional="hide" string="Green Incumbency Sheet URL"/>
+          <field name="grittvpostlogweek" optional="hide" string="GritTV PostLog Week"/>
+          <field name="grittvprelogweek" optional="hide" string="GritTV PreLog Week"/>
+          <field name="grittv_post_logs_date_time" optional="hide" string="GritTV Post Logs Date/Time"/>
+          <field name="grittv_post_log_url" optional="hide" string="GritTV Post-log URL"/>
+          <field name="grittv_pre_logs_date_time" optional="hide" string="GritTV Pre Logs Date/Time"/>
+          <field name="grittv_query_postlogs" optional="hide" string="GritTV Query Postlogs"/>
+          <field name="grittv_query_prelogs_nw" optional="hide" string="GritTV Query Prelogs NW"/>
+          <field name="grittv_query_prelogs" optional="hide" string="GritTV Query Prelogs"/>
+          <field name="grit_pp_postlog_url" optional="hide" string="Grit PP Postlog URL"/>
+          <field name="grit_pp_postlog_week" optional="hide" string="Grit PP Postlog Week"/>
+          <field name="grit_pp_query_postlogs" optional="hide" string="Grit PP Query Postlogs"/>
+          <field name="grit_prelog_1a_url" optional="hide" string="Grit Prelog NW URL"/>
+          <field name="grit_prelog_url" optional="hide" string="Grit Prelog URL"/>
+          <field name="hasoptedoutofemail" optional="hide" string="HasOptedOutOfEmail"/>
+          <field name="hasoptedoutoffax" optional="hide" string="HasOptedOutOfFax"/>
+          <field name="hemisphere_pp_post_logs" optional="hide" string="Hemisphere PP Post Logs"/>
+          <field name="hemisphere_pp_postlog_week" optional="hide" string="Hemisphere PP Postlog Week"/>
+          <field name="hemisphere_pp_prelog_week" optional="hide" string="Hemisphere PP PreLog Week"/>
+          <field name="hemisphere_pp_pre_nw_url" optional="hide" string="Hemisphere PP Pre NW URL"/>
+          <field name="hemisphere_pp_pre_tw_url" optional="hide" string="Hemisphere PP Pre TW URL"/>
+          <field name="hemisphere_paid_programing_post_logs" optional="hide" string="Hemisphere Paid Programing Post Logs"/>
+          <field name="hemisphere_prelog_week" optional="hide" string="Hemisphere PreLog Week"/>
+          <field name="hemisphere_sf_prelog_tw_url" optional="hide" string="Hemisphere SF Prelog tw url"/>
+          <field name="hemisphere_short_form_post_log_week" optional="hide" string="Hemisphere Short Form Post Log Week"/>
+          <field name="hemisphere_short_form_postlog" optional="hide" string="Hemisphere Short Form Postlog"/>
+          <field name="hemisphere_short_form_pre_nw_url" optional="hide" string="Hemisphere Short Form Pre NW URL"/>
+          <field name="hemisphere_short_form_pre_tw_url" optional="hide" string="Hemisphere Short Form Pre TW URL"/>
+          <field name="hemisphere_short_form_prelog_date_time" optional="hide" string="Hemisphere Short Form Prelog Date/Time"/>
+          <field name="hemisphere_short_form_prelog_week" optional="hide" string="Hemisphere Short Form Prelog Week"/>
+          <field name="homephone" optional="hide" string="HomePhone"/>
+          <field name="ionmysterypostlogweek" optional="hide" string="ION Mystery PostLog Week"/>
+          <field name="ionmysteryprelogweek" optional="hide" string="ION Mystery PreLog Week"/>
+          <field name="ionpluspostlogweek" optional="hide" string="IONPlusPostLogWeek"/>
+          <field name="ionplusprelogweek" optional="hide" string="ION Plus PreLog Week"/>
+          <field name="iontelevisionpostlogweek" optional="hide" string="ION Postlog Week"/>
+          <field name="iontelevisionprelogweek" optional="hide" string="ION Television Prelog Week"/>
+          <field name="ion_mysterypost_logs_date_time" optional="hide" string="ION Mystery Post Logs Date/Time"/>
+          <field name="ion_mystery_post_log_url" optional="hide" string="ION Mystery Post-log URL"/>
+          <field name="ion_mystery_pre_logs_date_time" optional="hide" string="ION Mystery Pre Logs Date/Time"/>
+          <field name="ion_mystery_prelog_1a_url" optional="hide" string="ION Mystery Prelog 1a URL"/>
+          <field name="ion_mystery_prelog_url" optional="hide" string="ION Mystery Prelog URL"/>
+          <field name="ion_mystery_query_postlogs" optional="hide" string="ION Mystery Query PostLogs"/>
+          <field name="ion_mystery_query_prelogs_nw" optional="hide" string="ION Mystery Query Prelogs NW"/>
+          <field name="ion_mystery_query_prelogs" optional="hide" string="ION Mystery Query Prelogs"/>
+          <field name="ion_pp_query_postlogs" optional="hide" string="ION PP Query Postlogs"/>
+          <field name="ion_plus_post_logs_date_time" optional="hide" string="ION Plus Post Logs Date/Time"/>
+          <field name="ion_plus_pre_log_date_time" optional="hide" string="ION Plus Pre Log Date/Time"/>
+          <field name="ion_plus_query_postlogs" optional="hide" string="ION Plus Query Postlogs"/>
+          <field name="ion_plus_query_prelogs_nw" optional="hide" string="ION Plus Query Prelogs NW"/>
+          <field name="ion_plus_query_prelogs" optional="hide" string="ION Plus Query Prelogs"/>
+          <field name="ion_post_logs_date_time" optional="hide" string="ION Post Logs Date/Time"/>
+          <field name="ion_pre_log_date_time" optional="hide" string="ION Pre Log Date/Time"/>
+          <field name="ion_pre_logs_nw" optional="hide" string="ION Query Prelogs NW"/>
+          <field name="ion_query_postlogs" optional="hide" string="ION Query Postlogs"/>
+          <field name="ion_query_prelogs" optional="hide" string="ION Query Prelogs"/>
+          <field name="io_campaign" optional="hide" string="IO Campaign"/>
+          <field name="io_end" optional="hide" string="IO End"/>
+          <field name="io_start" optional="hide" string="IO Start"/>
+          <field name="incumbency_month" optional="hide" string="Green Incumbency Month"/>
+          <field name="individualid" optional="hide" string="IndividualId"/>
+          <field name="ion_pp_post_log_url" optional="hide" string="Ion PP Post Log Url"/>
+          <field name="ion_pp_postlog_week" optional="hide" string="Ion PP Postlog Week"/>
+          <field name="jf_lc" optional="hide" string="JF LC"/>
+          <field name="jf_status" optional="hide" string="JF Status"/>
+          <field name="x_sf_contact_jade_ae" optional="hide" string="Jade AE (Contact)"/>
+          <field name="x_sf_contact_jigsaw" optional="hide" string="Jigsaw (Contact)"/>
+          <field name="kw_lc" optional="hide" string="KW LC"/>
+          <field name="kw_status" optional="hide" string="KW Status"/>
+          <field name="kiy_test_lightning_conductor" optional="hide" string="Kiy test Lightning Conductor"/>
+          <field name="lf_current_month" optional="hide" string="LF Current Month"/>
+          <field name="lf_month" optional="hide" string="LF Month"/>
+          <field name="lf" optional="hide" string="LF"/>
+          <field name="laffpostlogweek" optional="hide" string="Laff PostLog Week"/>
+          <field name="laffprelogweek" optional="hide" string="Laff PreLog Week"/>
+          <field name="laff_pp_post_log_url" optional="hide" string="Laff PP Post Log Url"/>
+          <field name="laff_pp_postlog_week" optional="hide" string="Laff PP Postlog Week"/>
+          <field name="laff_pp_query_postlogs" optional="hide" string="Laff PP Query Postlogs"/>
+          <field name="laff_post_log_url" optional="hide" string="Laff Post Log URL"/>
+          <field name="laff_post_logs_date_time" optional="hide" string="Laff Post Logs Date/Time"/>
+          <field name="laff_pre_logs_date_time" optional="hide" string="Laff Pre Logs Date/Time"/>
+          <field name="laff_prelog_1a_url" optional="hide" string="Laff Prelog NW URL"/>
+          <field name="laff_prelog_url" optional="hide" string="Laff Prelog URL"/>
+          <field name="laff_query_postlogs" optional="hide" string="Laff Query Postlogs"/>
+          <field name="laff_query_prelogs_nw" optional="hide" string="Laff Query Prelogs NW"/>
+          <field name="laff_query_prelogs" optional="hide" string="Laff Query Prelogs"/>
+          <field name="lastcurequestdate" optional="hide" string="LastCURequestDate"/>
+          <field name="lastcuupdatedate" optional="hide" string="LastCUUpdateDate"/>
+          <field name="lastcontact" optional="hide" string="LastContact"/>
+          <field name="last_contact_activity" optional="hide" string="Last Contact Activity"/>
+          <field name="leadsource" optional="hide" string="LeadSource"/>
+          <field name="lead_type" optional="hide" string="Lead Type"/>
+          <field name="x_sf_contact_lime_ae" optional="hide" string="Lime AE (Contact)"/>
+          <field name="logs_cc" optional="hide" string="Postlog cc"/>
+          <field name="logs_contact" optional="hide" string="Logs Contact"/>
+          <field name="mlbappletvprelogweek" optional="hide" string="MLBAppleTVPreLog Week"/>
+          <field name="mlbappletv_post_logs_date_time" optional="hide" string="MLBAppleTV Post Logs Date/Time"/>
+          <field name="mlbappletv_post_week" optional="hide" string="MLBAppleTV Post Week"/>
+          <field name="mlbappletv_postlog_url" optional="hide" string="MLBAppleTV Postlog URL"/>
+          <field name="mlbappletv_prelog_url" optional="hide" string="MLBAppleTV Prelog URL"/>
+          <field name="mlbappletv_prelogs_date_time" optional="hide" string="MLBAppleTV Prelogs Date/Time"/>
+          <field name="mlbappletv_query_postlogs" optional="hide" string="MLBAppleTV Query Postlogs"/>
+          <field name="mlbappletv_query_prelogs_nw" optional="hide" string="MLBAppleTV Query Prelogs NW"/>
+          <field name="mlbappletv_query_prelogs" optional="hide" string="MLBAppleTV Query Prelogs"/>
+          <field name="mlb_ae" optional="hide" string="MLB AE"/>
+          <field name="mlb_appletv_prelog_nw_url" optional="hide" string="MLB AppleTV Prelog NW URL"/>
+          <field name="mlb_network_pre_logs_date_time" optional="hide" string="MLB Network Pre Logs Date/Time"/>
+          <field name="mlb_network_prelog_1a_url" optional="hide" string="MLB Network Prelog NW URL"/>
+          <field name="mlb_network_prelog_url" optional="hide" string="MLB Network Prelog URL"/>
+          <field name="mlb_post_log_url1" optional="hide" string="MLB Post Log URL"/>
+          <field name="mlb_post_log_week" optional="hide" string="MLB Post Week"/>
+          <field name="mlb_post_logs_date_time" optional="hide" string="MLB Post Logs Date/Time"/>
+          <field name="mlb_prelog_week" optional="hide" string="MLB PreLog Week"/>
+          <field name="mlb_query_postlogs" optional="hide" string="MLB Query Postlogs"/>
+          <field name="mlb_query_prelogs_nw" optional="hide" string="MLB Query Prelogs NW"/>
+          <field name="mlb_query_prelogs" optional="hide" string="MLB Query Prelogs"/>
+          <field name="mp_lc" optional="hide" string="MP LC"/>
+          <field name="mp_status" optional="hide" string="MP Status"/>
+          <field name="x_sf_contact_maple_ae" optional="hide" string="Maple AE (Contact)"/>
+          <field name="meritstreetmediapostlogweek" optional="hide" string="Merit Street Post Week"/>
+          <field name="meritstreetmediaprelogweek" optional="hide" string="Merit Street Media PreLog Week"/>
+          <field name="merit_street_media_pre_logs_date_time" optional="hide" string="Merit Street Media Pre Logs Date/Time"/>
+          <field name="merit_street_post_logs_date_time" optional="hide" string="Merit Street Post Logs Date/Time"/>
+          <field name="merit_street_postlog_url" optional="hide" string="Merit Street Postlog URL"/>
+          <field name="merit_street_prelog_nw_url" optional="hide" string="Merit Street Prelog NW URL"/>
+          <field name="merit_street_prelog_url" optional="hide" string="Merit Street Prelog URL"/>
+          <field name="merit_street_query_postlog" optional="hide" string="Merit Street Query Postlog"/>
+          <field name="merit_street_query_prelog_nw" optional="hide" string="Merit Street Query Prelogs NW"/>
+          <field name="merit_street_query_prelog" optional="hide" string="Merit Street Query Prelog"/>
+          <field name="nbcu_s_postlog_week" optional="hide" string="NBCU S Postlog Week"/>
+          <field name="nbcu_s_prelog_week" optional="hide" string="NBCU S Prelog Week"/>
+          <field name="nbcu_synd_post_url" optional="hide" string="NBCU Synd Post URL"/>
+          <field name="nbcu_synd_prelog_nw_url" optional="hide" string="NBCU Synd Prelog NW URL"/>
+          <field name="nbcu_synd_prelog_pd360" optional="hide" string="NBCU Synd Prelog PD360"/>
+          <field name="nbcu_synd_prelog_url" optional="hide" string="NBCU Synd Prelog URL"/>
+          <field name="nhllocalnetworkpostlogweek" optional="hide" string="NHL Local Network PostLog Week"/>
+          <field name="nhllocalnetworkprelogweek" optional="hide" string="NHL Local Network Prelog Week"/>
+          <field name="nhlnetworkpostlogweek" optional="hide" string="NHL Network PostLog Week"/>
+          <field name="nhlnetworkprelogweek" optional="hide" string="NHL Network Prelog Week"/>
+          <field name="nhl_local_network_post_log_url" optional="hide" string="NHL Local Network Post Log URL"/>
+          <field name="nhl_local_network_post_logs_date_time" optional="hide" string="NHL Local Network Post Logs Date/Time"/>
+          <field name="nhl_local_network_pre_logs_date_time" optional="hide" string="NHL Local Network Pre Logs Date/Time"/>
+          <field name="nhl_local_network_prelog_nw_url" optional="hide" string="NHL Local Network Prelog NW URL"/>
+          <field name="nhl_local_network_prelog_url" optional="hide" string="NHL Local Network Prelog URL"/>
+          <field name="nhl_local_network_query_postlogs" optional="hide" string="NHL Local Network Query Postlogs"/>
+          <field name="nhl_local_network_query_prelogs_nw" optional="hide" string="NHL Local Network Query Prelogs NW"/>
+          <field name="nhl_local_network_query_prelogs" optional="hide" string="NHL Local Network Query Prelogs"/>
+          <field name="nhl_network_post_log_url" optional="hide" string="NHL Network Post Log URL"/>
+          <field name="nhl_network_post_logs_date_time" optional="hide" string="NHL Network Post Logs Date/Time"/>
+          <field name="nhl_network_pre_logs_date_time" optional="hide" string="NHL Network Pre Logs Date/Time"/>
+          <field name="nhl_network_prelog_nw_url" optional="hide" string="NHL Network Prelog NW URL"/>
+          <field name="nhl_network_prelog_url" optional="hide" string="NHL Network Prelog URL"/>
+          <field name="nhl_network_query_postlogs" optional="hide" string="NHL Network Query Postlogs"/>
+          <field name="nhl_network_query_prelogs_nw" optional="hide" string="NHL Network Query Prelogs NW"/>
+          <field name="nhl_network_query_prelogs" optional="hide" string="NHL Network Query Prelogs"/>
+          <field name="newsy_post_log_url" optional="hide" string="Newsy Post Log URL"/>
+          <field name="newsy_post_logs_date_time" optional="hide" string="Newsy Post Logs Date/Time"/>
+          <field name="newsy_pre_log_url" optional="hide" string="Newsy Pre Log URL"/>
+          <field name="newsy_pre_logs_date_time" optional="hide" string="Newsy Pre Logs Date/Time"/>
+          <field name="newsy_prelog_nw_url" optional="hide" string="Newsy Prelog NW URL"/>
+          <field name="newsy_query_postlogs" optional="hide" string="Newsy Query Postlogs"/>
+          <field name="newsy_query_prelogs_nw" optional="hide" string="Newsy Query Prelogs NW"/>
+          <field name="newsy_query_prelogs" optional="hide" string="Newsy Query Prelogs"/>
+          <field name="noseytvpostlogweek" optional="hide" string="NoseyTV Postlog Week"/>
+          <field name="noseytvprelogweek" optional="hide" string="NoseyTV Prelog Week"/>
+          <field name="noseytv_post_logs_date_time" optional="hide" string="NoseyTV Post Logs Date/Time"/>
+          <field name="noseytv_postlog_url" optional="hide" string="NoseyTV Postlog URL"/>
+          <field name="noseytv_pre_log_date_time" optional="hide" string="NoseyTV Pre Log Date/Time"/>
+          <field name="noseytv_prelog_nw_url" optional="hide" string="NoseyTV Prelog NW URL"/>
+          <field name="noseytv_prelog_url" optional="hide" string="NoseyTV Prelog URL"/>
+          <field name="noseytv_query_postlog" optional="hide" string="NoseyTV Query Postlog"/>
+          <field name="noseytv_query_prelog" optional="hide" string="NoseyTV Query Prelog"/>
+          <field name="noseytv_query_prelogs_nw" optional="hide" string="NoseyTV Query Prelogs NW"/>
+          <field name="novelisima_postlog_week_date_time" optional="hide" string="Novelisima Postlog Week Date/Time"/>
+          <field name="novelisima_postlog_week" optional="hide" string="Novelisima Postlog Week"/>
+          <field name="novelisima_prelogweek" optional="hide" string="Novelisima PrelogWeek"/>
+          <field name="novelisima_prelog_date_time" optional="hide" string="Novelisima Prelog Date Time"/>
+          <field name="novelisima_prelog_nw_url" optional="hide" string="Novelisima Prelog NW URL"/>
+          <field name="novelisima_prelog_url" optional="hide" string="Novelisima Prelog URL"/>
+          <field name="x_sf_contact_oak_ae" optional="hide" string="Oak AE (Contact)"/>
+          <field name="x_sf_contact_onyx_ae" optional="hide" string="Onyx AE (Contact)"/>
+          <field name="otheraddress" optional="hide" string="OtherAddress"/>
+          <field name="otherphone" optional="hide" string="OtherPhone"/>
+          <field name="outlawpostlogweek" optional="hide" string="Outlaw PostLogWeek"/>
+          <field name="outlawprelogweek" optional="hide" string="Outlaw Prelog Week"/>
+          <field name="outlaw_pp_postlog_url" optional="hide" string="Outlaw PP Postlog URL"/>
+          <field name="outlaw_pp_postlog_week" optional="hide" string="Outlaw PP Postlog Week"/>
+          <field name="outlaw_post_logs_date_time" optional="hide" string="Outlaw Post Logs Date/Time"/>
+          <field name="outlaw_post_log_url" optional="hide" string="Outlaw Post log URL"/>
+          <field name="outlaw_pre_logs_date_time" optional="hide" string="Outlaw Pre Logs Date/Time"/>
+          <field name="outlaw_prelog_nw_url" optional="hide" string="Outlaw Prelog NW URL"/>
+          <field name="outlaw_prelog_url" optional="hide" string="Outlaw Prelog URL"/>
+          <field name="outlaw_query_postlogs" optional="hide" string="Outlaw Query Postlogs"/>
+          <field name="outlaw_query_prelogs_nw" optional="hide" string="Outlaw Query Prelogs NW"/>
+          <field name="outlaw_query_prelogs" optional="hide" string="Outlaw Query Prelogs"/>
+          <field name="x_sf_contact_panther_ae" optional="hide" string="Panther AE (Contact)"/>
+          <field name="x_sf_contact_pine_ae" optional="hide" string="Pine AE (Contact)"/>
+          <field name="x_sf_contact_platinum_ae" optional="hide" string="Platinum AE (Contact)"/>
+          <field name="post_log_week" optional="hide" string="Post Log Week"/>
+          <field name="pre_log_week" optional="hide" string="Pre Log Week"/>
+          <field name="prelog_cc" optional="hide" string="Prelog Cc"/>
+          <field name="pronouns" optional="hide" string="Pronouns"/>
+          <field name="questnetworkpostlogweek" optional="hide" string="Quest Network PostLog Week"/>
+          <field name="questnetworkprelogweek" optional="hide" string="Quest PreLog Week"/>
+          <field name="quest_network_pre_logs_date_time" optional="hide" string="Quest Pre Logs Date/Time"/>
+          <field name="quest_network_query_postlogs" optional="hide" string="Quest Network Query Postlogs"/>
+          <field name="quest_network_query_prelogs_nw" optional="hide" string="Quest Network Query Prelogs NW"/>
+          <field name="quest_network_query_prelogs" optional="hide" string="Quest Network Query Prelogs"/>
+          <field name="quest_post_log" optional="hide" string="Quest Post Log URL"/>
+          <field name="quest_post_logs_date_time" optional="hide" string="Quest Post Logs Date/Time"/>
+          <field name="quest_pre_log_url" optional="hide" string="Quest Pre Log URL"/>
+          <field name="quest_prelog_nw_url" optional="hide" string="Quest Prelog NW URL"/>
+          <field name="reportstoid" optional="hide" string="ReportsToId"/>
+          <field name="sd_lc" optional="hide" string="SD LC"/>
+          <field name="sd_status" optional="hide" string="SD Status"/>
+          <field name="x_sf_contact_sfssdupecatcher__override_dupecatcher" optional="hide" string="Contact Override DupeCatcher (Contact)"/>
+          <field name="sf_lc" optional="hide" string="SF LC"/>
+          <field name="sf_status" optional="hide" string="SF Status"/>
+          <field name="scrippsnewspostlogweek" optional="hide" string="Scripps News PostLog Week"/>
+          <field name="scrippsnewsprelogweek" optional="hide" string="Scripps News PreLog Week"/>
+          <field name="x_sf_contact_silver_ae" optional="hide" string="Silver AE (Contact)"/>
+          <field name="synd_post_log_query_url" optional="hide" string="Synd Post Log Query URL"/>
+          <field name="synd_post_log_url" optional="hide" string="Synd Post Log URL"/>
+          <field name="synd_pre_log_query_url" optional="hide" string="Synd Pre Log Query URL"/>
+          <field name="synd_pre_log_url" optional="hide" string="Synd Pre Log URL"/>
+          <field name="the365postlogweek" optional="hide" string="THE365 PostLogWeek"/>
+          <field name="the365prelogweek" optional="hide" string="THE365 Prelog Week"/>
+          <field name="the365_pp_postlog_url" optional="hide" string="THE365 PP Postlog URL"/>
+          <field name="the365_pp_postlog_week" optional="hide" string="THE365 PP Postlog Week"/>
+          <field name="the365_post_logs_date_time" optional="hide" string="THE365 Post Logs Date/Time"/>
+          <field name="the365_post_log_url" optional="hide" string="THE365 Post-log URL"/>
+          <field name="the365_pre_logs_date_time" optional="hide" string="THE365 Pre Logs Date/Time"/>
+          <field name="the365_prelog_nw_url" optional="hide" string="THE365 Prelog NW URL"/>
+          <field name="the365_prelog_url" optional="hide" string="THE365 Prelog URL"/>
+          <field name="the365_query_postlogs" optional="hide" string="THE365 Query Postlogs"/>
+          <field name="the365_query_prelogs_nw" optional="hide" string="THE365 Query Prelogs NW"/>
+          <field name="the365_query_prelogs" optional="hide" string="THE365 Query Prelogs"/>
+          <field name="tl_lc" optional="hide" string="TL LC"/>
+          <field name="tl_status" optional="hide" string="TL Status"/>
+          <field name="tvg2postlogweek" optional="hide" string="TVG2 PostLog Week"/>
+          <field name="tvg2prelogweek" optional="hide" string="TVG2 PreLog Week"/>
+          <field name="tvgpostlogweek" optional="hide" string="TVG PostLog Week"/>
+          <field name="tvgprelogweek" optional="hide" string="TVG PreLog Week"/>
+          <field name="twistpostlogweek" optional="hide" string="TWIST Postlog Week"/>
+          <field name="twistprelogweek" optional="hide" string="TWIST Prelog Week"/>
+          <field name="twist_prelog_nw_url" optional="hide" string="TWIST Prelog NW URL"/>
+          <field name="x_sf_contact_teal_ae" optional="hide" string="Teal AE (Contact)"/>
+          <field name="thistv_post_week" optional="hide" string="ThisTV Post Week"/>
+          <field name="thistv_prelog_week" optional="hide" string="ThisTV PreLog Week"/>
+          <field name="titletype" optional="hide" string="TitleType"/>
+          <field name="traffic_cc" optional="hide" string="Traffic CC"/>
+          <field name="traffic_contact" optional="hide" string="[Dep]Traffic Contact"/>
+          <field name="truecrimenetworkpostlogweek" optional="hide" string="True Crime Network PostLogWeek"/>
+          <field name="truecrimenetworkprelogweek" optional="hide" string="True Crime Network PreLog Week"/>
+          <field name="truerealpostlogweek" optional="hide" string="True Real Post Log Week"/>
+          <field name="truerealprelogweek" optional="hide" string="True Real Pre Log Week"/>
+          <field name="true_crime_network_post_date_time" optional="hide" string="True Crime Network Post Date/Time"/>
+          <field name="true_crime_network_post_url" optional="hide" string="True Crime Network Post URL"/>
+          <field name="true_crime_network_pre_date_time" optional="hide" string="True Crime Network Pre Date/Time"/>
+          <field name="true_crime_network_prelog_nw" optional="hide" string="True Crime Network Prelog NW URL"/>
+          <field name="true_crime_network_prelog_url" optional="hide" string="True Crime Network Prelog URL"/>
+          <field name="true_crime_network_query_postlogs" optional="hide" string="True Crime Network Query Postlogs"/>
+          <field name="true_crime_network_query_prelogs_nw" optional="hide" string="True Crime Network Query Prelogs NW"/>
+          <field name="true_crime_network_query_prelogs" optional="hide" string="True Crime Network Query Prelogs"/>
+          <field name="true_real_post_log_url" optional="hide" string="True Real Post Log URL"/>
+          <field name="true_real_post_logs_date_time" optional="hide" string="True Real Post Logs Date Time"/>
+          <field name="true_real_pre_logs_date_time" optional="hide" string="True Real Pre Logs Date Time"/>
+          <field name="true_real_prelog_nw_url" optional="hide" string="True Real Prelog NW URL"/>
+          <field name="true_real_query_post_logs" optional="hide" string="True Real Query Post Logs"/>
+          <field name="true_real_query_pre_logs_nw" optional="hide" string="True Real Query Pre Logs NW"/>
+          <field name="true_real_query_pre_logs" optional="hide" string="True Real Query Pre Logs"/>
+          <field name="twist_pp_post_log_url" optional="hide" string="Twist PP Post Log URL"/>
+          <field name="twist_pp_postlog_week" optional="hide" string="Twist PP Postlog Week"/>
+          <field name="twist_post_logs_date_time" optional="hide" string="Twist Post Logs Date/Time"/>
+          <field name="twist_pre_log_date_time" optional="hide" string="Twist Pre Log Date/Time"/>
+          <field name="twist_query_postlogs" optional="hide" string="Twist Query Postlogs"/>
+          <field name="twist_query_prelogs_nw" optional="hide" string="Twist Query Prelogs NW"/>
+          <field name="twist_query_prelogs" optional="hide" string="Twist Query Prelogs"/>
+          <field name="x_sf_contact_type" optional="hide" string="Type (Contact)"/>
+          <field name="univision_synd_post_log_url" optional="hide" string="Univision Synd Post Log URL"/>
+          <field name="univision_synd_pre_log_url" optional="hide" string="Univision Synd Pre Log URL"/>
+          <field name="univision_synd_query_postlogs" optional="hide" string="Univision Synd Query Postlogs"/>
+          <field name="univision_synd_query_prelogs" optional="hide" string="Univision Synd Query Prelogs"/>
+          <field name="wapa_cinco_post_url" optional="hide" string="WAPA Cinco Post URL"/>
+          <field name="wapa_cinco_postlog_week" optional="hide" string="WAPA Cinco Postlog Week"/>
+          <field name="wapa_cinco_prelog_week" optional="hide" string="WAPA Cinco PreLog Week"/>
+          <field name="wapa_cinco_pre_nw_url" optional="hide" string="WAPA Cinco Pre NW URL"/>
+          <field name="wapa_cinco_pre_tw_url" optional="hide" string="WAPA Cinco Pre TW URL"/>
+          <field name="wapa_cinco_url" optional="hide" string="WAPA Cinco URL"/>
+          <field name="wapa_post_date" optional="hide" string="WAPA Post Date"/>
+          <field name="wapa_cinco_post_log_bundle" optional="hide" string="Wapa Cinco Post Log Bundle"/>
+          <field name="wapa_cinco_post_log_spot" optional="hide" string="Wapa Cinco Post Log Spot"/>
+          <field name="x_sf_contact_yellow_ae" optional="hide" string="Yellow AE (Contact)"/>
+          <field name="yellow_syndication_ae" optional="hide" string="Yellow Syndication AE"/>
+      </xpath>
+    </field>
+  </record>
+
+</odoo>
