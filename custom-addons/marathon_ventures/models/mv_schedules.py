@@ -64,7 +64,6 @@ class MvSchedules(models.Model):
     day = fields.Date(string='Day')  # SF: Day__c
     day_of_air_check = fields.Boolean(string='Day of Air Check', compute='_compute_day_of_air_check', store=True)  # SF: Day_of_Air_Check__c
     day_of_week = fields.Char(string='Day of Week', compute='_compute_day_of_week', store=True)  # SF: Day_of_Week__c
-    daypart = fields.Char(string='Daypart', compute='_compute_daypart', store=True)  # SF: Daypart__c
     daysallowedformula = fields.Char(string='Days Allowed Formula', compute='_compute_daysallowedformula', store=True)  # SF: DaysAllowedFormula__c
     days_allowed_formula = fields.Char(string='Days Allowed Formula (days_allowed_formula)', compute='_compute_days_allowed_formula', store=True)  # SF: Days_Allowed_Formula__c
     days_allowed = fields.Many2many(string='Days Allowed', comodel_name='mv.days_allowed.tag', relation='mv_schedules_days_allowed_rel', help='Select the days that this schedule CAN air on.')  # SF: Days_Allowed__c
@@ -621,52 +620,6 @@ class MvSchedules(models.Model):
         for rec in self:
             # TODO: translate SF formula to Python
             rec.day_of_week = False
-
-    @api.depends()
-    def _compute_daypart(self):
-        # SF formula (verbatim, may need translation):
-        #   IF(
-        #       LEFT(TEXT(MGM_HD_Daypart__c), 6) = "W - SS", "W - SS",
-        #       IF(OR(
-        #           LEFT(TEXT(MGM_HD_Daypart__c), 2) = "DA",
-        #           LEFT(TEXT(MGM_HD_Daypart__c), 2) = "EM",
-        #           LEFT(TEXT(MGM_HD_Daypart__c), 2) = "ON",
-        #           LEFT(TEXT(MGM_HD_Daypart__c), 2) = "PR",
-        #           LEFT(TEXT(MGM_HD_Daypart__c), 2) = "LN",
-        #           LEFT(TEXT(MGM_HD_Daypart__c), 2) = "EF",
-        #           LEFT(TEXT(MGM_HD_Daypart__c), 2) = "LF",
-        #           LEFT(TEXT(MGM_HD_Daypart__c), 2) = "FR"),
-        #           LEFT(TEXT(MGM_HD_Daypart__c), 2),
-        #           CASE(MGM_HD_Daypart__c,
-        #               "9A-6P – Day","DA",
-        #               "Day Live Game","DA",
-        #               "6P-12A – PR","PR",
-        #               "Prime Live Game","PR",
-        #               "JC - MS 7p-12a","PR",
-        #               "6A-9A – EM","EM",
-        #               "3A-6A -- ON","ON",
-        #               "JC - MS 12a-5a","ON",
-        #               "12A-3A -- LN","LN",
-        #               "SS 9a-4p","DA",
-        #               "MS 12a-2a","WC",
-        #               "MS 2a-6a","ON",
-        #               "MS 1p-6p","DA",
-        #               "WC - MS 12a-2a","WC",
-        #               "Matinee Game MS","DA",
-        #               "Prime Game MS","PR",
-        #               "MS 7p-12a","PR",
-        #               "ROS-","ROS-",
-        #               "W - SS 10a-7p 4Q22", "WK DA",
-        #               "NWSL Live Games", "NWSL 7p-1a",
-        #               "STUDIO - NWSL", "NWSL 7p-1a",
-        #               "WNBA Live Games", "WNBA 7p-1a",
-        #               "STUDIO - WNBA", "WNBA 7p-1a",
-        #               "")
-        #       )
-        #   )
-        for rec in self:
-            # TODO: translate SF formula to Python
-            rec.daypart = False
 
     @api.depends()
     def _compute_daysallowedformula(self):

@@ -40,13 +40,11 @@
                 <field name="demographics"/>
                 <field name="length"/>
                 <field name="min_sep"/>
-                <field name="quarter"/>
                 <field name="status"/>
                 <field name="tier"/>
                 <field name="x_class"/>
                 <field name="bundle_start_week"/>
                 <field name="log_exp_date"/>
-                <field name="ltc_date"/>
                 <field name="related_advertiser_log_exp_date"/>
                 <field name="week_pending"/>
                 <field name="access_code"/>
@@ -65,11 +63,9 @@
                 <field name="clientcode"/>
                 <field name="commercial_type"/>
                 <field name="conga_invoice_wapa"/>
-                <field name="contact_email"/>
                 <field name="contactaccount"/>
                 <field name="count_of_schedules"/>
                 <field name="count_of_weeks"/>
-                <field name="digital_id"/>
               </group>
               <group>
                 <field name="disfox_conga_invoice_url"/>
@@ -78,7 +74,6 @@
                 <field name="ff_invoice_month"/>
                 <field name="ff_long_form_invoice_month"/>
                 <field name="hiatus_dates"/>
-                <field name="max_day"/>
                 <field name="merit_street_media_2025"/>
                 <field name="network_deal_number"/>
                 <field name="product_code"/>
@@ -99,19 +94,11 @@
                 <field name="week_min_field"/>
                 <field name="e_i_friendly"/>
                 <field name="pi"/>
-                <field name="priority"/>
                 <field name="revised"/>
-                <field name="test_pp"/>
                 <field name="actual_rating_year"/>
-                <field name="budget_30"/>
                 <field name="bundle_version"/>
-                <field name="deal_count"/>
-                <field name="max_sep"/>
-                <field name="rate"/>
                 <field name="ratings_year"/>
-                <field name="restricted_programming_dna"/>
                 <field name="vendor_commission"/>
-                <field name="year"/>
               </group>
             </page>
             <!-- <page string="SF Metadata">

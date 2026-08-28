@@ -26,22 +26,47 @@
     background: #f6f7f9;
     border-bottom: 1px solid #e4e6eb;
     margin: -24px -28px 18px -28px;
-    padding: 14px 24px;
+    padding: 8px 24px;
     border-radius: 8px 8px 0 0;
     font-size: 16px;
     font-weight: 600;
     color: #1a1d22;
 }
 
+/* RECORD TYPE radio options render as .form-check-label - keep them
+   at normal option-text size, not the banner's title styling. */
+.mv-deal-redesign .mv-deal-banner .form-check-label {
+    font-size: 13px;
+    font-weight: 400;
+}
+
+/* Center each radio circle on its label text (Bootstrap's default
+   margin-top offset assumes larger text). */
+.mv-deal-redesign .mv-deal-banner .form-check {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.mv-deal-redesign .mv-deal-banner .form-check-input {
+    margin-top: 0;
+}
+
+/* Keep all record-type options on one line with the RECORD TYPE label. */
+.mv-deal-redesign .mv-deal-banner .o_field_radio .o_horizontal {
+    flex-wrap: nowrap !important;
+    white-space: nowrap;
+}
+
 /* Section labels (CAMPAIGN INFORMATION / SPOT DETAILS). */
 .mv-deal-redesign .mv-section-label {
     text-transform: uppercase;
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 700;
     letter-spacing: 0.06em;
-    color: #6b7280;
+    color: #858c9a;
     margin: 22px 0 10px 0;
-    padding-bottom: 6px;
+    padding-bottom: 2px;
     border-bottom: 1px solid #eceef1;
 }
 
@@ -78,7 +103,7 @@
 .mv-deal-redesign .mv-essentials-grid .o_inner_group {
     display: grid !important;
     grid-template-columns: 1fr !important;
-    row-gap: 12px !important;
+    row-gap: 0 !important;
     column-gap: 0 !important;
     padding: 0 !important;
 }
@@ -122,11 +147,15 @@
     grid-column: 1 / -1 !important;
 }
 
-/* Style the actual <input> / <select> elements to look like the mockup. */
-.mv-deal-redesign .mv-essentials-grid input:not(.form-check-input):not([type="checkbox"]),
+/* Style the actual <input> / <select> elements to look like the mockup.
+   Tag-widget internals are excluded: in a many2many_tags field the
+   bordered box is the pill CONTAINER (.o_field_tags), and its inner
+   typing <input> must stay invisible. */
+.mv-deal-redesign .mv-essentials-grid input:not(.form-check-input):not([type="checkbox"]):not(.o_field_tags input),
 .mv-deal-redesign .mv-essentials-grid select,
-.mv-deal-redesign .mv-essentials-grid .o_input,
-.mv-deal-redesign .mv-essentials-grid .o_field_widget input:not(.form-check-input):not([type="checkbox"]),
+.mv-deal-redesign .mv-essentials-grid .o_input:not(.o_field_tags .o_input):not(.o_field_tags),
+.mv-deal-redesign .mv-essentials-grid .o_field_tags,
+.mv-deal-redesign .mv-essentials-grid .o_field_widget:not(.o_field_many2many_tags) input:not(.form-check-input):not([type="checkbox"]),
 .mv-deal-redesign .mv-essentials-grid .o_field_widget select {
     width: 100% !important;
     border: 1px solid #d1d5db !important;
@@ -135,6 +164,17 @@
     background-color: #ffffff !important;
     font-size: 14px !important;
     line-height: 1.4 !important;
+}
+
+/* Monetary widgets overlay an absolutely-positioned .o_input span
+   across the whole row (currency symbol + input). Give the border to
+   the real <input> only, never the overlay - otherwise a second box
+   edge pokes out to the left of the field. */
+.mv-deal-redesign .mv-essentials-grid .o_field_monetary span.o_input.o_input.o_input.position-absolute {
+    border: none !important;
+    padding: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
 }
 
 /* Many2one fields use a wrapper — make it full width too. */
@@ -211,6 +251,65 @@
     border-top: 1px solid #eceef1;
 }
 
+/* Schedule Details tab - thin divider between each field row
+   (Status row / Timing row / Pricing row). Keep the rhythm tight:
+   the groups' own top/bottom margins are zeroed so the divider
+   padding is the only vertical gap. */
+.mv-deal-redesign .mv-details-row {
+    padding-bottom: 0;
+    margin-top: 0 !important;
+    margin-bottom: 0 !important;
+}
+
+.mv-deal-redesign .mv-details-row + .mv-details-row {
+    border-top: 1px solid #eceef1;
+    padding-top: 10px;
+}
+
+/* Timing row (the 5-column one) keeps a little air under it. */
+.mv-deal-redesign .mv-essentials-grid-5.mv-details-row {
+    padding-bottom: 10px;
+}
+
+/* Tag fields (Days Allowed): the pill container carries the border;
+   the inner typing input must stay invisible instead of rendering as
+   its own 350px bordered box next to the pills. */
+.mv-deal-redesign .mv-essentials-grid .o_field_tags input {
+    border: none !important;
+    box-shadow: none !important;
+    outline: none !important;
+    width: 100% !important;
+    min-width: 30px !important;
+    padding: 0 !important;
+}
+
+/* The typing input sits inside a .w-100 wrapper that would otherwise
+   claim a full row of its own - let it flex into the space left over
+   next to the pills instead. */
+.mv-deal-redesign .mv-essentials-grid .o_field_tags .o_field_many2many_selection {
+    width: auto !important;
+    min-width: 30px !important;
+    flex: 1 1 30px !important;
+}
+
+.mv-deal-redesign .mv-essentials-grid .o_field_tags .o_input_dropdown {
+    width: 100% !important;
+}
+
+/* Day pills - neutral gray rounded rectangles like the mockup,
+   instead of the theme's pink full-round pills. */
+.mv-deal-redesign .mv-essentials-grid .o_field_tags .o_tag {
+    background: rgba(186, 168, 202, 0.34) !important;
+    color: #1a1d22 !important;
+    border-radius: 6px !important;
+    font-size: 13px;
+    padding: 3px 10px;
+}
+
+.mv-deal-redesign .mv-essentials-grid .o_field_tags .o_tag .o_delete {
+    color: #4b5563;
+}
+
 .mv-deal-redesign .mv-form-footer {
     display: none;
 }
@@ -247,6 +346,56 @@
 .mv-deal-redesign .mv-key-ribbon > .o_group {
     grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
     gap: 10px 18px;
+}
+
+/* Schedule form variant - seven key facts on one row.
+   The custom classes land ON the .o_group element itself, which Odoo
+   renders as a Bootstrap flex row whose children get col-lg-2 - seven
+   children overflow 12 columns, so the 7th always wrapped. Switch the
+   ribbon to a real grid with weighted tracks: Account / Advertiser /
+   Brands carry text and get the room; Length / Order Number /
+   Total Dollars / Equiv :30 are short numbers and stay narrow. */
+.mv-deal-redesign .mv-key-ribbon-7.o_group {
+    display: grid !important;
+    grid-template-columns:
+        minmax(0, 1.6fr)   /* Account       */
+        minmax(0, 1.6fr)   /* Advertiser    */
+        minmax(0, 1.2fr)   /* Brands        */
+        minmax(0, 0.6fr)   /* Length        */
+        minmax(0, 1fr)     /* Order Number  */
+        minmax(0, 1.15fr)  /* Total Dollars */
+        minmax(0, 0.8fr)   /* Equiv :30     */
+        !important;
+    column-gap: 18px;
+}
+
+/* Neutralize the Bootstrap col-lg-2 width on the fact cells. */
+.mv-deal-redesign .mv-key-ribbon-7.o_group > .o_inner_group {
+    width: 100% !important;
+    max-width: 100% !important;
+}
+
+/* Money block: divider ahead of Total Dollars, bold values for the
+   last two facts (Total Dollars, Equiv :30). */
+.mv-deal-redesign .mv-key-ribbon-7.o_group > .o_inner_group:nth-last-child(2) {
+    border-left: 1px solid #d8dbe2;
+    padding-left: 18px;
+}
+
+.mv-deal-redesign .mv-key-ribbon-7.o_group > .o_inner_group:nth-last-child(-n+2) .o_field_widget {
+    font-weight: 700;
+}
+
+/* Ribbon labels never wrap - the weighted tracks give each fact
+   enough room for its one-line label at desktop widths. */
+.mv-deal-redesign .mv-key-ribbon-7.o_group .o_form_label {
+    white-space: nowrap;
+}
+
+@media (max-width: 1024px) {
+    .mv-deal-redesign .mv-key-ribbon-7.o_group {
+        grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    }
 }
 
 .mv-deal-redesign .mv-key-ribbon .o_form_label {
@@ -348,8 +497,17 @@
     grid-row-gap: 4px !important;
 }
 
+.mv-deal-redesign .mv-essentials-grid-5 {
+    display: grid !important;
+    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+    grid-column-gap: 24px !important;
+    grid-row-gap: 4px !important;
+}
+
 .mv-deal-redesign .mv-essentials-grid-4 > .o_inner_group,
 .mv-deal-redesign .mv-essentials-grid-4 > .o_group,
+.mv-deal-redesign .mv-essentials-grid-5 > .o_inner_group,
+.mv-deal-redesign .mv-essentials-grid-5 > .o_group,
 .mv-deal-redesign .mv-essentials-grid-2 > .o_inner_group,
 .mv-deal-redesign .mv-essentials-grid-2 > .o_group {
     grid-column: auto !important;
@@ -360,12 +518,14 @@
 
 /* Responsive: 4-col collapses to 2 then 1; 2-col collapses to 1. */
 @media (max-width: 1024px) {
-    .mv-deal-redesign .mv-essentials-grid-4 {
+    .mv-deal-redesign .mv-essentials-grid-4,
+    .mv-deal-redesign .mv-essentials-grid-5 {
         grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
     }
 }
 @media (max-width: 640px) {
     .mv-deal-redesign .mv-essentials-grid-4,
+    .mv-deal-redesign .mv-essentials-grid-5,
     .mv-deal-redesign .mv-essentials-grid-2 {
         grid-template-columns: 1fr !important;
     }
@@ -458,4 +618,93 @@
 .mv-deal-redesign select.o_field_invalid:focus {
     border-color: #b02a37 !important;
     box-shadow: 0 0 0 3px #dc3545 !important;
+}
+
+/* ============================================================================
+   Link color across the redesigned forms - anchors, record links
+   (Program / Brands / Deal Parent etc.) and the notebook tab links.
+   ============================================================================ */
+.mv-deal-redesign a,
+.mv-deal-redesign .o_form_uri,
+.mv-deal-redesign .o_field_many2one a,
+.mv-deal-redesign .nav-tabs .nav-link {
+    color: #8872ce;
+}
+
+.mv-deal-redesign .nav-tabs .nav-link {
+    font-weight: 700;
+}
+
+.mv-deal-redesign .nav-tabs .nav-link.active {
+    color: #1a1d22;
+}
+
+/* Dropdown / autocomplete picker options stay black - the #8872ce
+   link color is for record links and tabs, not pick-lists. */
+.mv-deal-redesign .dropdown-menu a,
+.mv-deal-redesign .dropdown-item,
+.mv-deal-redesign .o-autocomplete--dropdown-menu a,
+.o-autocomplete--dropdown-menu .dropdown-item,
+.o_popover .dropdown-item {
+    color: #1a1d22 !important;
+}
+
+/* Control-panel breadcrumb (New | Schedules / A-xxxx): space the
+   breadcrumb block off the New button, parent crumb small + gray,
+   record name bold near-black. */
+.mv-deal-redesign .o_breadcrumb {
+    margin-left: 14px;
+}
+
+.mv-deal-redesign .breadcrumb .o_back_button a {
+    color: #858c9a !important;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.mv-deal-redesign .o_last_breadcrumb_item {
+    font-weight: 700;
+    color: #1a1d22;
+    font-size: 15px;
+}
+
+/* Monetary fields: draw the box around the WRAPPER so the currency
+   symbol sits inside the input box, and unstyle the inner <input>.
+   (Class repetition outranks the blanket input rule's :not() chain.) */
+.mv-deal-redesign .mv-essentials-grid .o_field_monetary > div.d-inline-flex {
+    border: 1px solid #d1d5db !important;
+    border-radius: 6px !important;
+    background-color: #ffffff !important;
+    padding: 8px 12px !important;
+    gap: 0;
+}
+
+.mv-deal-redesign .mv-essentials-grid .o_field_monetary.o_field_monetary.o_field_monetary.o_field_monetary.o_field_monetary input {
+    border: none !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    background: transparent !important;
+}
+
+/* Field-help "?" markers - match the link purple instead of teal. */
+.mv-deal-redesign sup.text-info {
+    color: #8872ce !important;
+}
+
+/* Kill the stock inner-group gap and bottom margin on the redesigned
+   forms - vertical rhythm comes from our own row rules. */
+.mv-deal-redesign .o_inner_group {
+    gap: 0 !important;
+    margin-bottom: 0 !important;
+}
+
+/* Trim the dead space under the last field row (tab-pane 16px +
+   sheet 24px was ~41px of nothing). */
+.mv-deal-redesign .o_notebook .tab-pane {
+    padding-bottom: 0 !important;
+}
+
+.mv-deal-redesign .o_form_sheet {
+    padding-bottom: 20px !important;
 }

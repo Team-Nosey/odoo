@@ -1,49 +1,17 @@
 # -*- coding: utf-8 -*-
 """Phase 9 - Schedule UI helpers.
 
-Mirrors the Deal redesign: transient toggle for the collapsed Advanced
-section, plus two display-only helpers ("Additional Weeks" / "End Week
-auto-filled") that approximate the mockup without requiring a separate
-wizard step.
+Mirrors the Deal redesign: related read-only fields for the Key Schedule
+Facts ribbon (account / advertiser / brand / length / order number pulled
+through deal_parent) plus the stored related Program used by the
+Targeting row and dashboards.
 """
-from datetime import timedelta
-from odoo import models, fields, api
+from odoo import models, fields
 
 
 class MvScheduleUiPhase9(models.Model):
     _name = 'mv.schedules'
     _inherit = 'mv.schedules'
-
-    # UI-only flag - default False = Advanced section collapsed.
-    show_advanced_schedule = fields.Boolean(
-        string='Show Advanced',
-        default=False,
-        store=False,
-        copy=False,
-    )
-
-    # Additional Weeks - a hint count the planner can type. NOT stored;
-    # the existing mv.schedule.additional.wizard is the real mechanism
-    # for cloning N weekly schedules. This field exists so the create
-    # form matches the mockup layout (Start Week | Additional Weeks |
-    # End Week auto).
-    additional_weeks = fields.Integer(
-        string='Additional Weeks',
-        default=0,
-        store=False,
-        copy=False,
-        help='UI hint only. Use the "Additional Schedules" wizard to '
-             'actually clone N weekly schedules after this one is saved.',
-    )
-
-    # End Week (auto) - computed from week + additional_weeks.
-    end_week_auto = fields.Date(
-        string='End Week (auto)',
-        compute='_compute_end_week_auto',
-        store=False,
-        readonly=True,
-        help='Auto-calculated as Start Week + Additional Weeks. Display only.',
-    )
 
     # Program - related Many2one through deal_parent.program. Lets the
     # Targeting section show Network / Daypart / Program in one row
@@ -56,19 +24,19 @@ class MvScheduleUiPhase9(models.Model):
         readonly=True,
     )
 
-    @api.depends('week', 'additional_weeks')
-    def _compute_end_week_auto(self):
-        for rec in self:
-            if rec.week:
-                weeks = rec.additional_weeks or 0
-                rec.end_week_auto = rec.week + timedelta(weeks=weeks)
-            else:
-                rec.end_week_auto = False
-
-    def action_toggle_advanced_schedule(self):
-        for rec in self:
-            rec.show_advanced_schedule = not rec.show_advanced_schedule
-        return False
+    # Key Schedule Facts ribbon - read-only mirrors pulled through the
+    # parent Deal, matching the Deal form's Key Deal Facts ribbon.
+    kf_account = fields.Char(
+        related='deal_parent.contactaccount', string='Account', readonly=True)
+    kf_advertiser = fields.Char(
+        related='deal_parent.advertiser', string='Advertiser', readonly=True)
+    kf_brands = fields.Many2one(
+        related='deal_parent.brands', string='Brands', readonly=True)
+    kf_length = fields.Selection(
+        related='deal_parent.length', string='Length', readonly=True)
+    kf_order_number = fields.Char(
+        related='deal_parent.network_deal_number', string='Order Number',
+        readonly=True)
 
     # NOTE: action_cancel_schedule was previously overridden here to
     # redirect to the schedules list view. That override completely

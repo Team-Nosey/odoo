@@ -39,7 +39,6 @@ class TestPrelogFuzzyMatching(TransactionCase):
             'program': cls.program.id,
             'network_deal_number': 'FZY-100',
             'length': 'v_30',
-            'rate': 100.0,
         })
         cls.schedule = cls.env['mv.schedules'].create({
             'deal_parent': cls.deal.id,
@@ -55,7 +54,6 @@ class TestPrelogFuzzyMatching(TransactionCase):
             'program': cls.other_program.id,
             'network_deal_number': 'FZY-100',
             'length': 'v_30',
-            'rate': 100.0,
         })
         cls.other_schedule = cls.env['mv.schedules'].create({
             'deal_parent': cls.other_deal.id,

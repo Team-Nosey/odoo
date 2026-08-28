@@ -27,19 +27,6 @@
     </field>
   </record>
 
-  <record id="view_mv_schedules_form_phase8_rt" model="ir.ui.view">
-    <field name="name">mv.schedules.form.phase8.recordtype</field>
-    <field name="model">mv.schedules</field>
-    <field name="inherit_id" ref="marathon_ventures.view_mv_schedules_form"/>
-    <field name="arch" type="xml">
-      <xpath expr="//notebook" position="before">
-        <group>
-          <field name="sf_record_type" widget="radio" options="{'horizontal': true}"/>
-        </group>
-      </xpath>
-    </field>
-  </record>
-
   <record id="view_mv_schedules_list_phase8_rt" model="ir.ui.view">
     <field name="name">mv.schedules.list.phase8.recordtype</field>
     <field name="model">mv.schedules</field>

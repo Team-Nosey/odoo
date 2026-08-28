@@ -31,16 +31,64 @@
         </div>
       </xpath>
 
+
+      <!-- (A2) Key Schedule Facts ribbon (top, all tabs) - read-only data
+           from the schedule and its parent Deal, mirroring the Deal form's
+           Key Deal Facts ribbon. -->
+      <xpath expr="//notebook" position="before">
+        <group name="key_schedule_facts_ribbon"
+               class="mv-key-ribbon mv-key-ribbon-7"
+               invisible="not id"
+               col="7">
+          <group col="1">
+            <field name="kf_account" readonly="1" force_save="1"/>
+          </group>
+          <group col="1">
+            <field name="kf_advertiser" readonly="1" force_save="1"/>
+          </group>
+          <group col="1">
+            <field name="kf_brands" readonly="1" force_save="1"/>
+          </group>
+          <group col="1">
+            <field name="kf_length" readonly="1" force_save="1"/>
+          </group>
+          <group col="1">
+            <field name="kf_order_number" readonly="1" force_save="1"/>
+          </group>
+          <group col="1">
+            <field name="currency_id" invisible="1"/>
+            <field name="total_dollars" widget="monetary" readonly="1" force_save="1"/>
+          </group>
+          <group col="1">
+            <field name="equiv_30" readonly="1" force_save="1"/>
+          </group>
+        </group>
+      </xpath>
+
       <!-- (B) Replace Details page with the regrouped layout. -->
       <xpath expr="//notebook/page[1]" position="replace">
         <page string="Details" name="page_details">
 
-          <!-- ===== 1. TIMING ===== -->
-          <div class="mv-section-label">TIMING</div>
-          <group col="4" name="grp_timing"
-                 class="mv-essentials-grid mv-essentials-grid-4">
+          <group col="3" name="grp_sched_main" class="mv-essentials-grid mv-details-row">
             <group>
-              <field name="week" string="Start Week" required="1"/>
+              <field name="status"/>
+            </group>
+            <group>
+              <field name="deal_parent"/>
+            </group>
+            <group>
+              <field name="program" readonly="1"/>
+            </group>
+          </group>
+
+          <group col="5" name="grp_sched_timing"
+                 class="mv-essentials-grid mv-essentials-grid-5 mv-details-row">
+            <group>
+              <field name="week" string="Start Week" required="1"
+                     options="{'numeric': true}"/>
+            </group>
+            <group>
+              <field name="program_daypart" readonly="0"/>
             </group>
             <group>
               <field name="start_time"/>
@@ -53,17 +101,8 @@
             </group>
           </group>
 
-          <!-- ===== 2. PRICING =====
-               currency_id is declared up here so total_dollars's monetary
-               widget can resolve it. The mv-essentials-grid CSS makes
-               labels stack above inputs and inputs go full-width. We use
-               plain (non-monetary) widgets for the editable rate so the
-               input renders as a normal <input type="number"> with no
-               currency-widget rendering surprises. -->
-          <field name="currency_id" invisible="1"/>
-          <div class="mv-section-label">PRICING</div>
-          <group col="4" name="grp_pricing"
-                 class="mv-essentials-grid mv-essentials-grid-4">
+          <group col="4" name="grp_sched_pricing"
+                 class="mv-essentials-grid mv-essentials-grid-4 mv-details-row">
             <group>
               <field name="rate" readonly="0"/>
             </group>
@@ -76,102 +115,17 @@
             <group>
               <field name="max_per_day"/>
             </group>
-            <group>
-              <field name="total_dollars" readonly="1"/>
-            </group>
           </group>
 
-          <!-- ===== 3. TARGETING ===== -->
-          <div class="mv-section-label">TARGETING</div>
-          <group col="3" name="grp_targeting" class="mv-essentials-grid">
-            <group>
-              <field name="status"/>
-            </group>
-            <group>
-              <field name="networks"/>
-            </group>
-            <group>
-              <field name="deal_parent"/>
-            </group>
-            <group>
-              <field name="daypart" readonly="1"/>
-            </group>
-            <group>
-              <field name="program_daypart" readonly="0"/>
-            </group>
-            <group>
-              <field name="program" readonly="1"/>
-            </group>
-          </group>
-
-          <!-- ===== 4. ADDITIONAL ===== -->
-          <div class="mv-section-label">ADDITIONAL</div>
-          <group col="2" name="grp_additional_sched"
-                 class="mv-essentials-grid mv-essentials-grid-2">
-            <group>
-              <field name="additional_weeks"/>
-            </group>
-            <group>
-              <field name="end_week_auto" string="End Week (auto-filled)"/>
-            </group>
-          </group>
-
-          <!-- Campaign Total card sits below Pricing-related sections. -->
-          <div class="mv-campaign-total">
-            <span class="mv-campaign-total-label">CAMPAIGN TOTAL (ALL WEEKS)</span>
-            <span class="mv-campaign-total-value">
-              <field name="total_dollars" widget="monetary"
-                     readonly="1" nolabel="1"/>
-            </span>
-            <span class="mv-campaign-total-formula">
-              = Rate &#215; Units Available &#215; (1 + Additional Weeks)
-            </span>
-          </div>
-
-          <!-- ===== ADVANCED (collapse bar) ===== -->
-          <div class="mv-additional-bar" name="mv_advanced_bar">
-            <span>
-              <button name="action_toggle_advanced_schedule"
-                      type="object"
-                      class="btn btn-link p-0 mv-additional-caret"
-                      string=" "/>
-              <span class="mv-additional-label">
-                Advanced (max per day, sub-day-part overrides, custom flags)
-              </span>
-            </span>
-            <span class="mv-additional-hint">
-              <span invisible="show_advanced_schedule">collapsed by default</span>
-              <span invisible="not show_advanced_schedule">expanded</span>
-            </span>
-          </div>
-          <field name="show_advanced_schedule" invisible="1"/>
-
-          <group col="2" name="grp_advanced"
-                 invisible="not show_advanced_schedule">
-            <group string="Spot Constraints">
-              <field name="max_per_day"/>
-              <field name="status"/>
-              <field name="priority_rank"/>
-              <field name="long_form"/>
-              <field name="special"/>
-              <field name="program_specific"/>
-            </group>
-            <group string="Rollup / Computed">
-              <field name="equiv_30" readonly="1"/>
-              <field name="adus_estimated" readonly="1"/>
-              <field name="adus_generated" readonly="1"/>
-              <field name="total_schedules" readonly="1"/>
-              <field name="start_end_time" readonly="1"/>
-              <field name="weighted_priority" readonly="1"/>
-            </group>
-          </group>
-
-          <!-- ===== FOOTER ===== -->
-
-          <!-- ===== FOOTER ===== -->
+          <!-- Footer: Cancel (discard edits, same behavior as the Deal
+               form via mv_deal_footer.js) | Save Schedule. Canceling the
+               RECORD lives in the header (Cancel/Uncancel Schedule). -->
           <div class="mv-form-footer">
-            <button name="action_cancel_schedule" type="object"
-                    string="Cancel" class="btn btn-secondary"/>
+            <a href="#"
+              role="button"
+              class="btn btn-secondary mv_cancel_deal">
+                Cancel
+            </a>
             <button name="action_save_record" type="object"
                     string="Save Schedule" class="btn btn-primary"/>
           </div>
@@ -193,6 +147,8 @@
               <field name="additional_intacct_si_number" readonly="0"/>
               <field name="additional_intacct_si_number_comments" readonly="0"/>
               <field name="advertiser_brand_program" readonly="0"/>
+              <field name="adus_estimated" readonly="0"/>
+              <field name="adus_generated" readonly="0"/>
               <field name="archived_prelog_booked_dollars" readonly="0"/>
               <field name="archived_prelog_count" readonly="0"/>
               <field name="bgcolor" readonly="0"/>
@@ -294,9 +250,9 @@
               <field name="liability" readonly="0"/>
               <field name="liability_000" readonly="0"/>
               <field name="locked_units" readonly="0"/>
+              <field name="long_form" readonly="0"/>
               <field name="max_allowable_units_per_day" readonly="0"/>
               <field name="mgm_hd_daypart" readonly="0"/>
-              <field name="program_daypart" readonly="0"/>
               <field name="militarytime" readonly="0"/>
               <field name="missing_traffic_current_url" readonly="0"/>
               <field name="month" readonly="0"/>
@@ -343,8 +299,10 @@
               <field name="prelog_count_version_6" readonly="0"/>
               <field name="primary_demographic_cpm" readonly="0"/>
               <field name="priority" readonly="0"/>
+              <field name="priority_rank" readonly="0"/>
               <field name="priority_weight_multiplier" readonly="0"/>
               <field name="product" readonly="0"/>
+              <field name="program_specific" readonly="0"/>
               <field name="quarter" readonly="0"/>
               <field name="quarter_change" readonly="0"/>
               <field name="rating_check" readonly="0"/>
@@ -356,10 +314,12 @@
               <field name="request_missing_traffic_url" readonly="0"/>
               <field name="revision_comments" readonly="0"/>
               <field name="send_as_new" readonly="0"/>
+              <field name="special" readonly="0"/>
               <field name="spot_count" readonly="0"/>
               <field name="spot_data_dollars_check" readonly="0"/>
               <field name="spot_data_unit_check" readonly="0"/>
               <field name="spot_total" readonly="0"/>
+              <field name="start_end_time" readonly="0"/>
               <field name="sum_of_check_payments" readonly="0"/>
               <field name="sum_spot_equiv_30" readonly="0"/>
               <field name="temp_working_log_check" readonly="0"/>
@@ -368,6 +328,7 @@
               <field name="total_dollars_earned" readonly="0"/>
               <field name="total_dollars_live_demo" readonly="0"/>
               <field name="total_historical_dollars" readonly="0"/>
+              <field name="total_schedules" readonly="0"/>
               <field name="total_time" readonly="0"/>
               <field name="traffic" readonly="0"/>
               <field name="traffic_contact" readonly="0"/>
@@ -387,6 +348,7 @@
               <field name="week_in_year" readonly="0"/>
               <field name="week_number" readonly="0"/>
               <field name="weighted_30_rate" readonly="0"/>
+              <field name="weighted_priority" readonly="0"/>
               <field name="weighted_rate" readonly="0"/>
               <field name="wo_30_units" readonly="0"/>
               <field name="wo_booked" readonly="0"/>

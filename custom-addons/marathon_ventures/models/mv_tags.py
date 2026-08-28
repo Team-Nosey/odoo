@@ -54,18 +54,6 @@ class TagBusinessTypeTag(models.Model):
         ('code_uniq', 'unique(code)', 'SF value code must be unique within mv.business_type.tag.'),
     ]
 
-class TagRestrictedProgrammingDnaTag(models.Model):
-    _name = 'mv.restricted_programming_dna.tag'
-    _description = 'Tag for restricted_programming_dna'
-
-    name = fields.Char(string='Name', required=True)
-    code = fields.Char(string='SF Value Code', index=True, copy=False)
-    color = fields.Integer(string='Color')
-
-    _sql_constraints = [
-        ('code_uniq', 'unique(code)', 'SF value code must be unique within mv.restricted_programming_dna.tag.'),
-    ]
-
 class TagLogTypeTag(models.Model):
     _name = 'mv.log_type.tag'
     _description = 'Tag for log_type'

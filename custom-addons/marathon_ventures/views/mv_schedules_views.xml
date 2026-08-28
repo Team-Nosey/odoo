@@ -76,7 +76,6 @@
                 <field name="contactaccountcolor"/>
                 <field name="countmenot"/>
                 <field name="day_of_week"/>
-                <field name="daypart"/>
                 <field name="days_allowed_formula"/>
                 <field name="days_of_air"/>
                 <field name="daysallowedformula"/>

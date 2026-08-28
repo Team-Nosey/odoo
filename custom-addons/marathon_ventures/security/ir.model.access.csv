@@ -112,8 +112,6 @@ access_mv_raycom_monthly_line_item_user,mv.raycom_monthly_line_item.user,model_m
 access_mv_raycom_monthly_line_item_portal,mv.raycom_monthly_line_item.portal,model_mv_raycom_monthly_line_item,base.group_portal,1,0,0,0
 access_mv_request_user,mv.request.user,model_mv_request,base.group_user,1,1,1,1
 access_mv_request_portal,mv.request.portal,model_mv_request,base.group_portal,1,0,0,0
-access_mv_restricted_programming_dna_tag_user,mv.restricted_programming_dna.tag.user,model_mv_restricted_programming_dna_tag,base.group_user,1,1,1,1
-access_mv_restricted_programming_dna_tag_portal,mv.restricted_programming_dna.tag.portal,model_mv_restricted_programming_dna_tag,base.group_portal,1,0,0,0
 access_mv_sales_invoice_user,mv.sales_invoice.user,model_mv_sales_invoice,base.group_user,1,1,1,1
 access_mv_sales_invoice_portal,mv.sales_invoice.portal,model_mv_sales_invoice,base.group_portal,1,0,0,0
 access_mv_sales_invoice_item_user,mv.sales_invoice_item.user,model_mv_sales_invoice_item,base.group_user,1,1,1,1

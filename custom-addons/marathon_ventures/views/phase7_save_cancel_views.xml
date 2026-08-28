@@ -708,18 +708,6 @@
       </xpath>
     </field>
   </record>
-  <record id="view_mv_schedules_form_savebtn" model="ir.ui.view">
-    <field name="name">mv.schedules.form.savebtn</field>
-    <field name="model">mv.schedules</field>
-    <field name="inherit_id" ref="marathon_ventures.view_mv_schedules_form"/>
-    <field name="arch" type="xml">
-      <xpath expr="//sheet" position="before">
-        <header>
-          <button name="action_save_record" type="object" string="Save" class="btn-primary o_mv_save_btn"/>
-        </header>
-      </xpath>
-    </field>
-  </record>
   <record id="view_mv_sf_credit_memo_form_savebtn" model="ir.ui.view">
     <field name="name">mv.sf_credit_memo.form.savebtn</field>
     <field name="model">mv.sf_credit_memo</field>

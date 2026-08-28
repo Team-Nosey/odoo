@@ -33,7 +33,6 @@ class MvDeal(models.Model):
     agency_deal_number = fields.Char(string='Agency Deal Number', size=20, index=True)  # SF: Agency_Deal_Number__c
     brand_id = fields.Char(string='Brand ID', compute='_compute_brand_id', store=True)  # SF: Brand_ID__c
     brands = fields.Many2one(string='Brands', comodel_name='mv.brands', ondelete='set null', help='Please use the look-up function, and double check the Advertiser for the  brand selected.')  # SF: Brands__c
-    budget_30 = fields.Monetary(string='Budget :30', currency_field='currency_id', help='12.28.12  Budget :30 Rate.  Entered on "Availability" Deals only.')  # SF: Budget_30__c
     bundle_action = fields.Selection(string='Bundle Action', selection=[('new_buy', 'NEW BUY'), ('add_to_schedule', 'ADD TO SCHEDULE'), ('canceled', 'CANCELED'), ('frequency_revision', 'FREQUENCY REVISION'), ('traffic_revision_only', 'TRAFFIC REVISION ONLY'), ('cancel_before_start', 'CANCEL BEFORE START'), ('frequency_adjustment_cancel', 'FREQUENCY ADJUSTMENT/CANCEL'), ('frequency_revision_traffic_change', 'FREQUENCY REVISION/TRAFFIC CHANGE')])  # SF: Bundle_Action__c | SF Unrestricted picklist
     bundle_start_week = fields.Date(string='Bundle Start Week')  # SF: Bundle_Start_Week__c
     bundle_version = fields.Integer(string='Bundle Version')  # SF: Bundle_Version__c
@@ -47,13 +46,10 @@ class MvDeal(models.Model):
     commercial_type = fields.Char(string='Commercial Type', compute='_compute_commercial_type', store=True, help='HYBRID or DR, based on Advertiser.')  # SF: Commercial_Type__c
     conga_invoice_wapa = fields.Char(string='Conga Invoice WAPA', compute='_compute_conga_invoice_wapa', store=True)  # SF: Conga_Invoice_WAPA__c
     contactaccount = fields.Char(string='ContactAccount', compute='_compute_contactaccount', store=True)  # SF: ContactAccount__c
-    contact_email = fields.Char(string='Contact Email', compute='_compute_contact_email', store=True)  # SF: Contact_Email__c
     contact = fields.Many2one(string='Contact', comodel_name='res.partner', ondelete='set null', help='Please use the lookup function and double check the Contact\'s Agency!')  # SF: Contact__c
     count_of_schedules = fields.Char(string='Count of Schedules', compute='_compute_count_of_schedules', store=True)  # SF: Count_of_Schedules__c | TODO unknown SF type: Summary
     count_of_weeks = fields.Char(string='Count of Weeks', compute='_compute_count_of_weeks', store=True)  # SF: Count_of_Weeks__c | TODO unknown SF type: Summary
-    deal_count = fields.Integer(string='Deal Count', compute='_compute_deal_count', store=True, help='Defined Field value of "1". To Count number of Deals in a Data Set/SF Report')  # SF: Deal_Count__c
     demographics = fields.Selection(string='Ratings Demos', selection=[('f18_24', 'F18-24'), ('f18_25', 'F18-25'), ('f18_34', 'F18-34'), ('f18_49', 'F18-49'), ('f18_99', 'F18-99'), ('f25_34', 'F25-34'), ('f25_49', 'F25-49'), ('f25_54', 'F25-54'), ('f25_64', 'F25-64'), ('f25_99', 'F25-99'), ('f2_99', 'F2-99'), ('f35_49', 'F35-49'), ('f35_54', 'F35-54'), ('f35_64', 'F35-64'), ('f35_99', 'F35-99'), ('f45_54', 'F45-54'), ('f50_64', 'F50-64'), ('f50_99', 'F50-99'), ('f55_64', 'F55-64'), ('f55_99', 'F55-99'), ('f65_99', 'F65-99'), ('hh', 'HH'), ('m18_24', 'M18-24'), ('m18_34', 'M18-34'), ('m18_49', 'M18-49'), ('m18_99', 'M18-99'), ('m25_34', 'M25-34'), ('m25_49', 'M25-49'), ('m25_54', 'M25-54'), ('m25_64', 'M25-64'), ('m25_99', 'M25-99'), ('m2_99', 'M2-99'), ('m35_49', 'M35-49'), ('m35_54', 'M35-54'), ('m35_64', 'M35-64'), ('m35_99', 'M35-99'), ('m50_64', 'M50-64'), ('m50_99', 'M50-99'), ('m55_64', 'M55-64'), ('m55_99', 'M55-99'), ('m65_99', 'M65-99'), ('p12_17', 'P12-17'), ('p18_24', 'P18-24'), ('p18_34', 'P18-34'), ('p18_49', 'P18-49'), ('p18_99', 'P18-99'), ('p2_11', 'P2-11'), ('p2_17', 'P2-17'), ('p25_34', 'P25-34'), ('p25_49', 'P25-49'), ('p25_54', 'P25-54'), ('p25_64', 'P25-64'), ('p25_99', 'P25-99'), ('p2_99', 'P2-99'), ('p35_49', 'P35-49'), ('p35_54', 'P35-54'), ('p35_64', 'P35-64'), ('p35_99', 'P35-99'), ('p45_54', 'P45-54'), ('p50_64', 'P50-64'), ('p50_99', 'P50-99'), ('p55_64', 'P55-64'), ('p55_99', 'P55-99'), ('p6_11', 'P6-11'), ('p65_99', 'P65-99'), ('w18_34', 'W18-34'), ('w18_49', 'W18-49'), ('w18_99', 'W18-99'), ('w25_54', 'W25-54'), ('w2_99', 'W2-99'), ('w35_99', 'W35-99'), ('w50_99', 'W50-99'), ('f55', 'F55+'), ('fs25_54', 'Fs25-54'), ('fs35_99', 'Fs35-99'), ('hhld', 'HHLD'), ('m55', 'M55+'), ('p2', 'P2+'), ('p35', 'P35+'), ('p55', 'P55+'), ('p65', 'P65+')])  # SF: Demographics__c
-    digital_id = fields.Char(string='Digital ID', size=25)  # SF: Digital_ID__c
     disfox_conga_invoice_url = fields.Char(string='DisFox Conga Invoice URL', compute='_compute_disfox_conga_invoice_url', store=True)  # SF: DisFox_Conga_Invoice_URL__c
     e_i_friendly = fields.Boolean(string='E/I Friendly')  # SF: E_I_Friendly__c
     entity_name = fields.Char(string='Entity Name', compute='_compute_entity_name', store=True)  # SF: Entity_Name__c
@@ -62,26 +58,19 @@ class MvDeal(models.Model):
     ff_long_form_invoice_month = fields.Char(string='FF Long Form Invoice Month', compute='_compute_ff_long_form_invoice_month', store=True)  # SF: FF_Long_Form_Invoice_Month__c | TODO unknown SF type: Summary
     hiatus_dates = fields.Char(string='Hiatus Dates', size=255)  # SF: Hiatus_Dates__c
     log_exp_date = fields.Date(string='LOG Exp Date')  # SF: LOG_Exp_Date__c
-    ltc_date = fields.Date(string='LTC Date')  # SF: LTC_Date__c
     length = fields.Selection(string='Length', selection=[('v_30', '30'), ('v_40', '40'), ('v_60', '60'), ('v_120', '120'), ('v_300', '300'), ('v_15', '15'), ('v_1710', '1710'), ('v_90', '90'), ('v_180', '180'), ('v_240', '240'), ('v_45', '45'), ('v_75', '75'), ('v_05', '05'), ('v_10', '10'), ('v_150', '150'), ('v_20', '20'), ('v_105', '105'), ('v_5', '5'), ('v_35', '35'), ('v_1714', '1714'), ('v_25', '25'), ('v_7', '7'), ('v_3510', '3510'), ('v_1650', '1650')])  # SF: Length__c | SF Unrestricted picklist
-    max_day = fields.Char(string='Max/Day', size=18)  # SF: Max_Day__c
-    max_sep = fields.Integer(string='Max Sep', help='Use Brand Separation. If not on paperwork, enter 30 min.')  # SF: Max_Sep__c
     merit_street_media_2025 = fields.Char(string='Merit Street Media 2025', compute='_compute_merit_street_media_2025', store=True)  # SF: Merit_Street_Media_2025__c
     min_sep = fields.Selection(string='Min Sep', selection=[('v_15', '15'), ('v_20', '20'), ('v_5', '5'), ('v_25', '25'), ('v_30', '30'), ('v_35', '35'), ('v_60', '60'), ('v_10', '10'), ('v_45', '45')], help='Uses Brand Separation. If not on paperwork, enter 15 min.')  # SF: Min_Sep__c
     network_deal_number = fields.Char(string='Network Deal Number', size=30, index=True, help='Deal number in Network\'s paper work, in Network\'s records.  Equals 1 if the PI campaign is no longer airing on the network.')  # SF: Network_Deal_Number__c
     pi = fields.Boolean(string='PI')  # SF: PI__c
-    priority = fields.Boolean(string='Priority')  # SF: Priority__c
     product_code = fields.Char(string='Product Code', size=25)  # SF: Product_Code__c
     program_account_advertiser_brand = fields.Char(string='Program+Account+Advertiser+Brand', compute='_compute_program_account_advertiser_brand', store=True)  # SF: Program_Account_Advertiser_Brand__c
     program_team_del_del = fields.Char(string='Program Team', compute='_compute_program_team_del_del', store=True)  # SF: Program_Team_del_del__c
     program = fields.Many2one(string='Program', comodel_name='mv.programs', ondelete='restrict')  # SF: Program__c
-    quarter = fields.Selection(string='Quarter', selection=[('q1', 'Q1'), ('q2', 'Q2'), ('q3', 'Q3'), ('q4', 'Q4')])  # SF: Quarter__c
-    rate = fields.Monetary(string='Rate', currency_field='currency_id')  # SF: Rate__c
     ratings_quarter = fields.Char(string='Ratings Quarter', compute='_compute_ratings_quarter', store=True)  # SF: Ratings_Quarter__c | TODO unknown SF type: Summary
     ratings_year = fields.Integer(string='Ratings Year', compute='_compute_ratings_year', store=True)  # SF: Ratings_Year__c
     raycom_comments = fields.Char(string='Bundle Comments', size=255)  # SF: Raycom_Comments__c
     related_advertiser_log_exp_date = fields.Date(string='[DEP]Advertiser LOG Exp. Date', compute='_compute_related_advertiser_log_exp_date', store=True)  # SF: Related_Advertiser_LOG_Exp_Date__c
-    restricted_programming_dna = fields.Many2many(string='Restricted Programming DNA', comodel_name='mv.restricted_programming_dna.tag', relation='mv_deal_restricted_programming_dna_rel')  # SF: Restricted_Programming_DNA__c
     revised = fields.Boolean(string='Revised')  # SF: Revised__c
     sf_conga_invoice_formula = fields.Char(string='SF Conga Invoice Formula', compute='_compute_sf_conga_invoice_formula', store=True)  # SF: SF_Conga_Invoice_Formula__c
     sf_conga_invoice_new_synd = fields.Char(string='SF Conga Invoice New Synd', compute='_compute_sf_conga_invoice_new_synd', store=True)  # SF: SF_Conga_Invoice_New_Synd__c
@@ -91,7 +80,6 @@ class MvDeal(models.Model):
     status = fields.Selection(string='Status', selection=[('sold', 'Sold'), ('canceled', 'Canceled'), ('budget', 'Budget'), ('historical', 'Historical')])  # SF: Status__c | SF Unrestricted picklist
     sum_of_total_dollars = fields.Char(string='Sum of Total Dollars', compute='_compute_sum_of_total_dollars', store=True, help='Sum of Total Dollars for the schedules for this deal.')  # SF: Sum_of_Total_Dollars__c | TODO unknown SF type: Summary
     sum_of_units_available = fields.Char(string='Sum of Units Available', compute='_compute_sum_of_units_available', store=True)  # SF: Sum_of_Units_Available__c | TODO unknown SF type: Summary
-    test_pp = fields.Boolean(string='Test PP', help='Paid Programming ONLY.  Check to indicate a test deal for month.')  # SF: Test_PP__c
     tier = fields.Selection(string='Tier', selection=[('v_1', '1'), ('v_2', '2'), ('v_3', '3'), ('v_4', '4')])  # SF: Tier__c
     vendor_account = fields.Char(string='Vendor Account', compute='_compute_vendor_account', store=True)  # SF: Vendor_Account__c
     vendor_commission = fields.Float(string='Vendor Commission', digits=(5, 2), compute='_compute_vendor_commission', store=True)  # SF: Vendor_Commission__c
@@ -100,7 +88,6 @@ class MvDeal(models.Model):
     week_min_field = fields.Char(string='Week MIN Field', compute='_compute_week_min_field', store=True)  # SF: Week_MIN_Field__c | TODO unknown SF type: Summary
     week_max = fields.Char(string='Week Max', compute='_compute_week_max', store=True)  # SF: Week_Max__c | TODO unknown SF type: Summary
     week_pending = fields.Date(string='Week Pending', compute='_compute_week_pending', store=True)  # SF: Week_Pending__c
-    year = fields.Integer(string='Year')  # SF: Year__c
 
     # === Computed / Roll-Up ===
 
@@ -257,14 +244,6 @@ class MvDeal(models.Model):
                 rec.contactaccount = False
 
     @api.depends()
-    def _compute_contact_email(self):
-        # SF formula (verbatim, may need translation):
-        #   Contact__r.Email
-        for rec in self:
-            # TODO: translate SF formula to Python
-            rec.contact_email = False
-
-    @api.depends()
     def _compute_count_of_schedules(self):
         # SF formula (verbatim, may need translation):
         for rec in self:
@@ -277,14 +256,6 @@ class MvDeal(models.Model):
         for rec in self:
             # TODO: translate SF formula to Python
             rec.count_of_weeks = False
-
-    @api.depends()
-    def _compute_deal_count(self):
-        # SF formula (verbatim, may need translation):
-        #   1
-        for rec in self:
-            # TODO: translate SF formula to Python
-            rec.deal_count = False
 
     @api.depends()
     def _compute_disfox_conga_invoice_url(self):
