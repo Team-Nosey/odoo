@@ -35,9 +35,12 @@ export class BundleStartWeekDialog extends Component {
     static components = { Dialog };
     static props = {
         close: { type: Function },        // supplied by dialog service
-        actionCode: { type: String },
-        actionLabel: { type: String },
+        // actionCode/actionLabel are omitted when the popup is used
+        // for plain "Generate Paperwork" (no bundle action involved).
+        actionCode: { type: String, optional: true },
+        actionLabel: { type: String, optional: true },
         initialWeek: { type: String, optional: true },
+        confirmLabel: { type: String, optional: true },
         onSubmit: { type: Function },     // called with (isoDate)
     };
 
@@ -45,15 +48,22 @@ export class BundleStartWeekDialog extends Component {
         this.state = useState({
             week: this.props.initialWeek || "",
             error: "",
+            busy: false,
         });
     }
 
+    get confirmText() {
+        return this.props.confirmLabel || _t("Confirm");
+    }
+
     async onConfirm() {
+        if (this.state.busy) return;
         if (!this.state.week) {
             this.state.error = _t("Please pick a Bundle Start Week.");
             return;
         }
         this.state.error = "";
+        this.state.busy = true;
         try {
             await this.props.onSubmit(this.state.week);
             this.props.close();
@@ -61,6 +71,8 @@ export class BundleStartWeekDialog extends Component {
             this.state.error =
                 (e && e.data && e.data.message)
                 || (e && e.message) || String(e);
+        } finally {
+            this.state.busy = false;
         }
     }
 
@@ -92,6 +104,10 @@ export class BundlePaperworkDialog extends Component {
         this.dialog = useService("dialog");
 
         this.state = useState({
+            // Bundle action the user clicked during THIS dialog
+            // session. Drives the button highlight; intentionally not
+            // seeded from the Deal's stored bundle_action.
+            selectedAction: "",
             loading: true,
             busy: false,
             error: "",
@@ -134,14 +150,26 @@ export class BundlePaperworkDialog extends Component {
         return "Bundle Paperwork";
     }
 
-    // -------- Generate Paperwork (New Buy) -----------------------
-    async onGenerate() {
+    // -------- Generate Paperwork -> ask for Bundle Start Week -----
+    // Same prompt the bundle-action buttons use, so the operator
+    // always confirms which week the paperwork is anchored on.
+    onGenerate() {
         if (this.state.busy) return;
+        this.dialog.add(BundleStartWeekDialog, {
+            initialWeek: this.state.snapshot.bundle_start_week || "",
+            confirmLabel: _t("Generate"),
+            onSubmit: async (weekIso) => {
+                await this._doGenerate(weekIso);
+            },
+        });
+    }
+
+    async _doGenerate(weekIso) {
         this.state.busy = true;
         try {
             this.state.snapshot = await this.orm.call(
                 "mv.deal", "bundle_paperwork_generate",
-                [[this.props.dealId]],
+                [[this.props.dealId], weekIso || false],
             );
             const n =
                 this.state.snapshot.xml_files.length +
@@ -156,6 +184,7 @@ export class BundlePaperworkDialog extends Component {
                 || (e && e.message) || String(e),
                 { type: "danger" },
             );
+            throw e;                      // keep the week popup open
         } finally {
             this.state.busy = false;
         }
@@ -202,6 +231,23 @@ export class BundlePaperworkDialog extends Component {
         }
     }
 
+    // -------- Bundle action selected-state helpers ---------------
+    // Highlight reflects an action the user CLICKED in this dialog
+    // session - deliberately NOT the Deal's stored `bundle_action`.
+    // A deal often already carries a bundle_action from an earlier
+    // run, and highlighting that would look like a pre-selection the
+    // operator never made.
+    isActiveBundleAction(action) {
+        const current = this.state.selectedAction || "";
+        return !!current && action && action.code === current;
+    }
+
+    bundleActionClass(action) {
+        return this.isActiveBundleAction(action)
+            ? "btn btn-sm btn-info mv-bp__bundle-action--active"
+            : "btn btn-sm btn-outline-info";
+    }
+
     // -------- Excel: Bundle Action -> mini popup -----------------
     onBundleAction(action) {
         this.dialog.add(BundleStartWeekDialog, {
@@ -213,6 +259,9 @@ export class BundlePaperworkDialog extends Component {
                     "mv.deal", "bundle_paperwork_run_action",
                     [[this.props.dealId], action.code, weekIso],
                 );
+                // Mark as clicked only after the action actually ran,
+                // so a failed RPC doesn't leave a misleading highlight.
+                this.state.selectedAction = action.code;
                 this.notification.add(
                     _t("Bundle action executed: %(l)s (week %(w)s)", {
                         l: action.label, w: weekIso,

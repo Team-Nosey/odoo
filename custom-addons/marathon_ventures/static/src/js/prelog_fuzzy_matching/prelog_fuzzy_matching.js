@@ -411,22 +411,6 @@ export class MvPrelogFuzzyMatching extends Component {
         this.state.manualSchedule = "";
         this.state.drawerOverrun = null;
     }
-    async viewAllOverrunPrelogs() {
-        // Close drawer, switch to Overruns tab, and pre-populate the
-        // search bar with the schedule name so the planner sees every
-        // prelog attached to (or targeting) that overrun schedule.
-        const details = this.state.drawerOverrun;
-        this.closeDrawer();
-        if (details && details.schedule_name) {
-            this.state.searchTerm = details.schedule_name;
-        }
-        if (this.state.activeTab !== "overruns") {
-            await this.setTab("overruns");
-        } else {
-            await this._loadResults();
-        }
-    }
-
     async onExport() {
         if (!this._filtersAreValid()) return;
         const f = this.state.filters;
@@ -510,6 +494,42 @@ export class MvPrelogFuzzyMatching extends Component {
     scheduleOpenUrl(schedule) {
         if (!schedule?.id) return "#";
         return `/odoo/mv.schedules/${schedule.id}`;
+    }
+    async openSchedule(schedule) {
+        // Open the schedule form THROUGH the action service so the web
+        // client keeps its top menu / breadcrumbs. A raw href to
+        // /odoo/mv.schedules/<id> loads a chrome-less standalone page.
+        if (!schedule?.id) return;
+        await this.action.doAction({
+            type: "ir.actions.act_window",
+            name: schedule.name || "Schedule",
+            res_model: "mv.schedules",
+            res_id: schedule.id,
+            views: [[false, "form"]],
+            target: "current",
+        });
+    }
+    async viewAllOverrunPrelogs() {
+        // Open a proper list action of every prelog tied to this
+        // overrun schedule (attached OR pending-suggestion sharing the
+        // same deal number), so the user gets a full-chrome list with
+        // the nav menu - not just a re-filter of the workbench.
+        const details = this.state.drawerOverrun;
+        if (!details) { this.closeDrawer(); return; }
+        const ids = details.all_prelog_ids || [];
+        this.closeDrawer();
+        if (!ids.length) return;
+        // Bulletproof domain: the server already resolved exactly which
+        // prelogs belong to this overrun (attached + pending), so we
+        // just open those ids directly.
+        await this.action.doAction({
+            type: "ir.actions.act_window",
+            name: `Prelogs · ${details.schedule_name || ""}`,
+            res_model: "mv.prelog_data",
+            domain: [["id", "in", ids]],
+            views: [[false, "list"], [false, "form"]],
+            target: "current",
+        });
     }
 }
 

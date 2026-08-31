@@ -83,19 +83,62 @@ class MvPrelogDataOverrun(models.Model):
     # lost an attached prelog. We recompute each one from scratch.
     # ------------------------------------------------------------------
     @api.model
+    def _mv_latest_prelog_version(self, schedule):
+        """Return the most-recent prelog version for a schedule's
+        program + week, or None when no prelog exists.
+
+        Prelog files are uploaded daily and each new version RE-INCLUDES
+        every prior day's spots (v5 contains Mon-Fri, v4 contains
+        Mon-Thu, etc.). Overrun must therefore be judged against a
+        SINGLE version - the latest upload - not the union of all
+        versions. This resolves that latest version from the prelog
+        population for the schedule's program + week.
+        """
+        program = schedule.deal_parent.program if schedule.deal_parent else False
+        week = schedule.week
+        domain = [('removed', '=', False)]
+        if program:
+            domain.append(('import_program', '=', program.id))
+        if week:
+            domain.append(('import_week_value', '=', week))
+        if not program and not week:
+            # Fall back to versions actually attached to this schedule.
+            domain = [('schedule', '=', schedule.id), ('removed', '=', False)]
+        latest = self.search(domain, order='version desc', limit=1)
+        return latest.version or None
+
+    @api.model
     def _recompute_prelog_overruns(self, schedule_ids):
         if not schedule_ids:
             return
         Schedule = self.env['mv.schedules']
         schedules = Schedule.browse(list(schedule_ids)).exists()
         for schedule in schedules:
-            attached = self.search(
-                [
-                    ('schedule', '=', schedule.id),
-                    ('removed', '=', False),
-                ],
-                order='id asc',
-            )
+            latest_version = self._mv_latest_prelog_version(schedule)
+
+            # Attached prelogs scoped to the LATEST version only. Spots
+            # carried over from earlier versions do not count toward the
+            # overrun (they are superseded by the newest upload).
+            attach_domain = [
+                ('schedule', '=', schedule.id),
+                ('removed', '=', False),
+            ]
+            if latest_version:
+                attach_domain.append(('version', '=', latest_version))
+            attached = self.search(attach_domain, order='id asc')
+
+            # Any prelog attached to this schedule from an OLDER version
+            # must have its is_overrun flag cleared - it is no longer in
+            # the active comparison set.
+            stale_overrun = self.search([
+                ('schedule', '=', schedule.id),
+                ('removed', '=', False),
+                ('is_overrun', '=', True),
+                ('id', 'not in', attached.ids),
+            ])
+            if stale_overrun:
+                stale_overrun.write({'is_overrun': False})
+
             count = len(attached)
             cap = int(schedule.units_available or 0)
             overrun = max(0, count - cap)

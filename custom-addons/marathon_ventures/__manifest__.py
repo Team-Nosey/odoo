@@ -2,7 +2,7 @@
 {
     'name': 'Marathon Ventures',
     'summary': 'Salesforce -> Odoo 19 migration of Marathon Ventures CRM/Sales/Traffic schema.',
-    'version': '19.0.1.2.3',
+    'version': '19.0.1.2.4',
     'license': 'LGPL-3',
     'author': 'Marathon Ventures (generated)',
     'website': '',

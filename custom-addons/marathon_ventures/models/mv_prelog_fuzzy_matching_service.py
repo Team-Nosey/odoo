@@ -131,7 +131,7 @@ class MvPrelogDataFuzzyMatching(models.Model):
         # before anyone clicks Attach. Ordering is airdate/id ASC so
         # the earliest-planned spots keep the seats and the last
         # suggestions become the overrun.
-        self._fuzzy_flag_suggested_overruns(all_rows, prelogs)
+        self._fuzzy_flag_suggested_overruns(all_rows, prelogs, selected_version)
 
         counts = {
             'all': sum(row['status'] != 'removed' for row in all_rows),
@@ -211,10 +211,20 @@ class MvPrelogDataFuzzyMatching(models.Model):
         if not schedule:
             return {}
 
-        attached = self.search(
-            [('schedule', '=', schedule.id), ('removed', '=', False)],
-            order='id asc',
+        # Version scoping: overrun is judged against a single upload
+        # version (the latest re-includes all prior days' spots). Use
+        # the passed version when present, else the latest for this
+        # schedule's program + week.
+        resolved_version = (
+            version or self._mv_latest_prelog_version(schedule)
         )
+        attached_domain = [
+            ('schedule', '=', schedule.id),
+            ('removed', '=', False),
+        ]
+        if resolved_version:
+            attached_domain.append(('version', '=', resolved_version))
+        attached = self.search(attached_domain, order='id asc')
 
         # Pending suggestions: prelogs that could realistically target
         # this schedule based on the deal-number join key. Restricted
@@ -235,8 +245,8 @@ class MvPrelogDataFuzzyMatching(models.Model):
                 pending_domain.append(('import_program', '=', self._fuzzy_int(program_id)))
             if week_start:
                 pending_domain.append(('import_week_value', '=', week_start))
-            if version:
-                pending_domain.append(('version', '=', version))
+            if resolved_version:
+                pending_domain.append(('version', '=', resolved_version))
             if import_job_id:
                 pending_domain.append(('import_job', '=', self._fuzzy_int(import_job_id)))
             pending = self.search(pending_domain, order='airdate asc, id asc')
@@ -265,6 +275,11 @@ class MvPrelogDataFuzzyMatching(models.Model):
         return {
             'schedule_id': schedule.id,
             'schedule_name': schedule.display_name or '',
+            'deal_number': deal_number or '',
+            # Every prelog id (attached + pending) so the "view all"
+            # action can use a bulletproof [('id','in',[...])] domain
+            # instead of reconstructing filter logic on the client.
+            'all_prelog_ids': combined.ids,
             'capped_units': capped,
             'attached_count': attached_count,
             'pending_count': pending_count,
@@ -982,7 +997,7 @@ class MvPrelogDataFuzzyMatching(models.Model):
         return domain
 
     @api.model
-    def _fuzzy_flag_suggested_overruns(self, all_rows, prelogs):
+    def _fuzzy_flag_suggested_overruns(self, all_rows, prelogs, selected_version=False):
         """Mark suggested rows as 'overrun' when the target schedule
         would exceed capacity if every suggestion attached.
 
@@ -991,15 +1006,20 @@ class MvPrelogDataFuzzyMatching(models.Model):
         - Group rows by their suggested schedule id (only rows still
           in status 'suggestion' contribute).
         - Available capacity = schedule.units_available minus rows
-          already attached to that same schedule (they already
-          consume seats).
-        - If len(suggestions_for_schedule) > available_capacity, the
-          LAST N (by index in `prelogs`, which was ordered airdate
-          asc, id asc) become 'overrun'.
+          already attached to that same schedule AT THE SAME VERSION
+          being viewed (spots carried over from older uploads don't
+          consume a seat in the current version's count).
+        - If len(suggestions_for_schedule) > available_capacity, EVERY
+          suggestion targeting it is flagged 'overrun'.
 
-        Also updates row['attached'] / row['suggested'] overrun_amount
-        so the Schedule column can render 'A-5170 +N' even for
-        pending suggestions.
+        Also updates row['suggested'] overrun_amount so the Schedule
+        column can render 'A-5170 +N' even for pending suggestions.
+
+        Version scoping: prelog files are uploaded daily and each new
+        version re-includes prior days' spots, so overrun is judged
+        against a single version. `selected_version` is the version the
+        workbench is currently filtered to; when set we count attached
+        prelogs only at that version.
         """
         Schedule = self.env['mv.schedules']
         rows_by_prelog_id = {row['id']: row for row in all_rows}
@@ -1022,7 +1042,17 @@ class MvPrelogDataFuzzyMatching(models.Model):
         schedules = Schedule.browse(list(suggested_bucket.keys())).exists()
         for schedule in schedules:
             cap = int(schedule.units_available or 0)
-            already_attached = int(schedule.prelog_attached_count or 0)
+            # Count prelogs already attached to this schedule, scoped to
+            # the version in view so carried-over spots aren't double
+            # counted against capacity.
+            attached_domain = [
+                ('schedule', '=', schedule.id),
+                ('removed', '=', False),
+            ]
+            resolved_version = selected_version or self._mv_latest_prelog_version(schedule)
+            if resolved_version:
+                attached_domain.append(('version', '=', resolved_version))
+            already_attached = self.env['mv.prelog_data'].search_count(attached_domain)
             available = cap - already_attached
             bucket = suggested_bucket[schedule.id]
             excess = len(bucket) - max(available, 0)

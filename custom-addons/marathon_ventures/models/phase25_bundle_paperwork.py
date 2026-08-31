@@ -16,11 +16,18 @@ Flow:
 import base64
 import io
 import logging
+import re
+import zipfile
 from collections import OrderedDict
-from datetime import timedelta
+from datetime import date, timedelta
 
 from odoo import models, fields, api, _
 from odoo.exceptions import UserError
+
+# Canonical broadcast-quarter maths lives in phase 12 (used by the
+# Units + Capping reports). Reuse it so every surface agrees on where
+# a quarter begins and ends.
+from .phase12_deal_start_date import _broadcast_quarter_bounds
 
 _logger = logging.getLogger(__name__)
 
@@ -52,6 +59,81 @@ def _string_formatter(text):
     if text is None:
         return ''
     return str(text).replace('&', 'and')
+
+
+def _iso_week_monday(d):
+    """Monday of the week containing `d`."""
+    if not d:
+        return d
+    return d - timedelta(days=d.weekday())
+
+
+def _quarter_mondays(ref):
+    """Every Monday of the BROADCAST quarter containing `ref`.
+
+    Only Mondays whose full Mon..Sun week stays inside the quarter are
+    included, so the list is 13 entries (14 in a 53-week broadcast
+    year). Example for 2026-08-31 -> broadcast Q3 2026 runs
+    2026-06-29..2026-09-27, giving Mondays 6-29 through 9-21.
+
+    Delegates the quarter maths to phase 12 so Bundle Paperwork, the
+    Units Report and the Capping Report all agree on where a quarter
+    starts and ends.
+    """
+    if not ref:
+        return []
+    q_start, q_end = _broadcast_quarter_bounds(_iso_week_monday(ref))
+    mondays = []
+    cur = q_start
+    while cur + timedelta(days=6) <= q_end:
+        mondays.append(cur)
+        cur += timedelta(days=7)
+    return mondays
+
+
+def _sched_units(schedule):
+    """Effective unit count for a schedule, as a float.
+
+    Prefers `units_aired` (booked minus preempted, 0 when canceled).
+    Falls back to `units_available` when units_aired is empty, which
+    covers rows whose stored compute predates the units_aired fix and
+    has not been recomputed yet. A canceled schedule always yields 0.
+
+    Without this fallback the Excel's Sheet2 column M (Total Units)
+    resolves to 0 for every schedule, which is what made the Order
+    sheet's SUMIF-per-week cells all render as 0.
+    """
+    if not schedule:
+        return 0.0
+    if getattr(schedule, 'status', '') == 'canceled':
+        return 0.0
+    aired = float(getattr(schedule, 'units_aired', 0.0) or 0.0)
+    if aired:
+        return aired
+    available = float(getattr(schedule, 'units_available', 0.0) or 0.0)
+    preempted = float(getattr(schedule, 'units_preempted', 0.0) or 0.0)
+    return max(0.0, available - preempted)
+
+
+def _bundle_action_slug(label):
+    """Turn a Bundle Action label into a filename-safe token.
+
+    'ADD TO SCHEDULE'                    -> 'Add_To_Schedule'
+    'FREQUENCY ADJUSTMENT/CANCEL'        -> 'Frequency_Adjustment_Cancel'
+    'FREQUENCY REVISION/TRAFFIC CHANGE'  -> 'Frequency_Revision_Traffic_Change'
+
+    Keeps the token readable in a filename while stripping the
+    characters Windows / Odoo attachment names dislike ('/', '\\', ':').
+    """
+    if not label:
+        return 'New_Buy'
+    text = str(label).strip()
+    # Title-case each alphabetic word, leave digits alone.
+    text = re.sub(r'[^0-9A-Za-z]+', ' ', text).strip()
+    if not text:
+        return 'New_Buy'
+    parts = [p.capitalize() if p.isalpha() else p for p in text.split()]
+    return '_'.join(parts)
 
 
 def _civilian_to_military(time_code):
@@ -155,6 +237,21 @@ class MvDealBundlePaperwork(models.Model):
     # ================================================================
     # RPC surface for the OWL dialog
     # ================================================================
+    def _mv_bundle_action_label(self, action_code=None):
+        """Resolve a Bundle Action code to its human label.
+
+        Passing action_code=None uses the value currently stored on
+        the deal. Returns '' when nothing is set so callers can apply
+        their own fallback.
+        """
+        self.ensure_one()
+        code = action_code if action_code is not None else (self.bundle_action or '')
+        if not code:
+            return ''
+        return dict(
+            self._fields['bundle_action'].selection or []
+        ).get(code, code)
+
     def bundle_paperwork_state(self):
         """Snapshot the dialog needs to render:
           * bundle info (name, brand)
@@ -200,11 +297,20 @@ class MvDealBundlePaperwork(models.Model):
             'excel_files': [_serialize(a) for a in atts if a.mv_bundle_paperwork_kind == 'excel'],
         }
 
-    def bundle_paperwork_generate(self):
+    def bundle_paperwork_generate(self, bundle_start_week=False):
         """Delegate to the wizard for the actual XML + Excel build,
         then return the fresh state so the OWL dialog can re-render
-        without a page refresh."""
+        without a page refresh.
+
+        `bundle_start_week` is the week the user picked in the dialog's
+        prompt. When supplied it is written to the Deal first, so the
+        generated paperwork (and the broadcast quarter its week columns
+        span) is anchored on the operator's choice rather than on a
+        stale stored value.
+        """
         self.ensure_one()
+        if bundle_start_week:
+            self.write({'bundle_start_week': bundle_start_week})
         wizard = self.env['mv.bundle_paperwork.wizard'].create({
             'deal_id': self.id,
         })
@@ -234,33 +340,56 @@ class MvDealBundlePaperwork(models.Model):
         }
 
     def bundle_paperwork_regenerate(self, attachment_id):
-        """Regenerate one XML in place. Rewrites the same
-        ir.attachment so the download url stays valid. Returns the
-        fresh state."""
+        """Regenerate the station XML archive in place. Rewrites the
+        same ir.attachment so the download url stays valid. Returns the
+        fresh state.
+
+        Station XMLs are packaged as a single zip, so a regenerate
+        rebuilds every station and repacks the whole archive rather
+        than touching one member.
+        """
         self.ensure_one()
         att = self.env['ir.attachment'].browse(int(attachment_id)).exists()
         if not att:
             raise UserError(_("Attachment not found."))
         if att.mv_bundle_paperwork_kind != 'xml':
             raise UserError(_(
-                "Regenerate is only available for XML files."
+                "Regenerate is only available for the XML archive."
             ))
-        call = att.mv_bundle_paperwork_station or ''
         wizard = self.env['mv.bundle_paperwork.wizard'].new({
             'deal_id': self.id,
         })
         wizard._validate_deal(self)
         chunks = wizard._build_schedule_chunks(self)
         stations = wizard._group_bundle_pricing_by_station(self)
-        if call not in stations:
+        if not stations:
             raise UserError(_(
-                "Station %s is no longer in the program's active "
-                "Bundle Pricing records."
-            ) % call)
-        body = wizard._generate_xml_for_station(
-            self, chunks, stations[call], self.name or '',
-        )
-        att.write({'datas': base64.b64encode(body.encode('utf-8'))})
+                "This program has no active Bundle Pricing records, so "
+                "no station XML can be produced."
+            ))
+        action_label = self._mv_bundle_action_label() or 'NEW BUY'
+        today_stamp = _iso_date(fields.Date.context_today(self))
+        contact_acc = (self.contactaccount or '').replace('/', '')
+        brand_name = ((self.brands and self.brands.name) or '').replace('/', '')
+
+        zip_buf = io.BytesIO()
+        with zipfile.ZipFile(
+            zip_buf, 'w', compression=zipfile.ZIP_DEFLATED,
+        ) as zf:
+            for call, station in stations.items():
+                body = wizard._generate_xml_for_station(
+                    self, chunks, station, self.name or '',
+                )
+                member_name = '%s-%s-%s-%s-%s-%s.xml' % (
+                    call, self.name or '', contact_acc,
+                    brand_name, action_label, today_stamp,
+                )
+                zf.writestr(member_name, body)
+        zip_buf.seek(0)
+        att.write({
+            'datas': base64.b64encode(zip_buf.getvalue()),
+            'mimetype': 'application/zip',
+        })
         return self.bundle_paperwork_state()
 
     def bundle_paperwork_run_action(self, action_code, bundle_start_week):
@@ -369,22 +498,55 @@ class MvDealBundlePaperwork(models.Model):
         wb.save(buf)
         buf.seek(0)
         # Rename to reflect the new action but keep the rest of the
-        # filename intact.
-        new_name = attachment.name or ''
-        if new_name:
-            for token in (
-                'NEW BUY', 'ADD TO SCHEDULE', 'CANCELED',
-                'FREQUENCY REVISION', 'TRAFFIC REVISION ONLY',
-                'CANCEL BEFORE START', 'FREQUENCY ADJUSTMENT/CANCEL',
-                'FREQUENCY REVISION/TRAFFIC CHANGE',
-            ):
-                if token in new_name:
-                    new_name = new_name.replace(token, action_label)
-                    break
+        # filename intact. Generated names look like
+        #   <deal>-<contactaccount>-<brand>-<Action_Slug>-<date>.xlsx
+        # so we swap the slug segment in place. If the name predates
+        # the action-slug convention (or was renamed by hand), the
+        # slug is inserted just before the trailing date instead.
+        new_name = self._mv_rename_with_action(
+            attachment.name or '', action_label,
+        )
         attachment.write({
             'datas': base64.b64encode(buf.getvalue()),
             'name': new_name or attachment.name,
         })
+
+    def _mv_rename_with_action(self, filename, action_label):
+        """Return `filename` with its Bundle Action token set to
+        `action_label`'s slug.
+
+        Handles three shapes:
+          1. Name already carries a known action slug  -> replace it.
+          2. Name carries a legacy UPPERCASE label     -> replace it.
+          3. Name carries neither                      -> insert the
+             slug immediately before the trailing date segment.
+        """
+        if not filename:
+            return filename
+        new_slug = _bundle_action_slug(action_label)
+        stem, dot, ext = filename.rpartition('.')
+        if not dot:
+            stem, ext = filename, ''
+        # Every possible slug / legacy label for this model's selection.
+        selection = self._fields['bundle_action'].selection or []
+        known_labels = [label for _code, label in selection]
+        known_slugs = [_bundle_action_slug(label) for label in known_labels]
+
+        parts = stem.split('-')
+        # Case 1 + 2: a segment matches a known slug or legacy label.
+        for idx, seg in enumerate(parts):
+            if seg in known_slugs or seg in known_labels:
+                parts[idx] = new_slug
+                break
+        else:
+            # Case 3: insert before a trailing YYYY-MM-DD date if the
+            # tail looks like one, else append at the end.
+            if len(parts) >= 3 and re.fullmatch(r'\d{4}', parts[-3] or ''):
+                parts.insert(-3, new_slug)
+            else:
+                parts.append(new_slug)
+        rebuilt = '-'.join(p for p in parts if p != '')
+        return '%s.%s' % (rebuilt, ext) if ext else rebuilt
 
 
 # =====================================================================
@@ -443,31 +605,59 @@ class MvBundlePaperworkWizard(models.TransientModel):
 
         created_ids = []
 
-        # ---- one XML per station -------------------------------
+        # Current Bundle Action label - drives both the in-file action
+        # marker and the generated file names. Falls back to NEW BUY so
+        # a deal with no action selected keeps the legacy behaviour.
+        action_label = deal._mv_bundle_action_label() or 'NEW BUY'
+        action_slug = _bundle_action_slug(action_label)
+
+        # ---- one XML per station, collected into ONE zip ---------
+        # Individual station XMLs are NOT attached to the deal any
+        # more; they only exist as members of the zip archive.
+        xml_members = []
         for call, station in stations.items():
             body = self._generate_xml_for_station(
                 deal, chunks, station, deal.name or '',
             )
-            filename = '%s-%s-%s-%s-NEW BUY-%s.xml' % (
+            filename = '%s-%s-%s-%s-%s-%s.xml' % (
                 call, deal.name or '', contact_acc,
-                brand_name, today_stamp,
+                brand_name, action_label, today_stamp,
+            )
+            xml_members.append((filename, body))
+
+        if xml_members:
+            zip_buf = io.BytesIO()
+            with zipfile.ZipFile(
+                zip_buf, 'w', compression=zipfile.ZIP_DEFLATED,
+            ) as zf:
+                for member_name, member_body in xml_members:
+                    zf.writestr(member_name, member_body)
+            zip_buf.seek(0)
+            zip_name = '%s-%s-%s-%s-%s.zip' % (
+                deal.name or 'DEAL', contact_acc, brand_name,
+                action_slug, today_stamp,
             )
             att = Attachment.create({
-                'name': filename,
-                'datas': base64.b64encode(body.encode('utf-8')),
+                'name': zip_name,
+                'datas': base64.b64encode(zip_buf.getvalue()),
                 'res_model': 'mv.deal',
                 'res_id': deal.id,
-                'mimetype': 'application/xml',
+                'mimetype': 'application/zip',
                 'type': 'binary',
                 'mv_bundle_paperwork_kind': 'xml',
-                'mv_bundle_paperwork_station': call,
+                # Station is intentionally blank: the archive spans
+                # every station rather than one.
+                'mv_bundle_paperwork_station': '',
             })
             created_ids.append(att.id)
 
         # ---- one Excel summary --------------------------------
-        xlsx_bytes = self._generate_excel(deal, chunks, stations)
-        xlsx_name = '%s-%s-%s-%s.xlsx' % (
-            deal.name or 'DEAL', contact_acc, brand_name, today_stamp,
+        xlsx_bytes = self._generate_excel(
+            deal, chunks, stations, action_label=action_label,
+        )
+        xlsx_name = '%s-%s-%s-%s-%s.xlsx' % (
+            deal.name or 'DEAL', contact_acc, brand_name,
+            action_slug, today_stamp,
         )
         att = Attachment.create({
             'name': xlsx_name,
@@ -523,8 +713,11 @@ class MvBundlePaperworkWizard(models.TransientModel):
             missing.append(_('Advertiser'))
         if not (deal.brands and deal.brands.name):
             missing.append(_('Brand name'))
-        if not deal.bundle_start_week:
-            missing.append(_('Bundle Start Week'))
+        # Bundle Start Week is intentionally NOT required: when it is
+        # blank (or points at a week with no Schedule) the chunk builder
+        # falls back to the current broadcast quarter's Schedules and
+        # back-fills the field with the week it actually used. See
+        # _resolve_bundle_schedules.
         if not deal.contactaccount:
             missing.append(_('Contact Account'))
         if not deal.length:
@@ -540,31 +733,113 @@ class MvBundlePaperworkWizard(models.TransientModel):
     # ================================================================
     # Schedule chunk builder
     # ================================================================
-    def _build_schedule_chunks(self, deal):
+    def _resolve_bundle_schedules(self, deal):
+        """Pick the schedule set to build paperwork from.
+
+        Resolution order:
+
+        1. If the Deal has a Bundle Start Week AND a Schedule exists on
+           exactly that week, use everything from that week forward.
+           (Original behaviour - an explicit start wins.)
+        2. Otherwise fall back to the CURRENT BROADCAST quarter: use the
+           Schedules whose week falls inside the quarter that contains
+           today. This is what makes "Generate Paperwork" work on a
+           Deal whose Bundle Start Week is blank or points at a week
+           with no Schedule.
+        3. If the quarter has no Schedules either, use the earliest
+           remaining un-sent Schedule from today onward, so paperwork
+           can still be produced for a purely future flight.
+
+        Returns (schedules_recordset, effective_start_week).
+        """
         Schedules = self.env['mv.schedules']
-        schedules = Schedules.search([
+        today = fields.Date.context_today(self)
+
+        base_domain = [
             ('deal_parent', '=', deal.id),
-            ('week', '>=', deal.bundle_start_week),
             ('xml_sent', '=', False),
-        ], order='week asc')
+        ]
+
+        # ---- 1. explicit Bundle Start Week, exact match ------------
+        if deal.bundle_start_week:
+            exact = Schedules.search(
+                base_domain + [('week', '=', deal.bundle_start_week)],
+                limit=1,
+            )
+            if exact:
+                schedules = Schedules.search(
+                    base_domain + [('week', '>=', deal.bundle_start_week)],
+                    order='week asc',
+                )
+                return schedules, deal.bundle_start_week
+
+        # ---- 2. current broadcast quarter --------------------------
+        q_start, q_end = _broadcast_quarter_bounds(today)
+        if q_start and q_end:
+            schedules = Schedules.search(
+                base_domain + [
+                    ('week', '>=', q_start),
+                    ('week', '<=', q_end),
+                ],
+                order='week asc',
+            )
+            if schedules:
+                _logger.info(
+                    "Bundle Paperwork: deal id=%s has no Schedule on its "
+                    "Bundle Start Week (%s); falling back to the current "
+                    "broadcast quarter %s..%s (%s schedule(s)).",
+                    deal.id, deal.bundle_start_week, q_start, q_end,
+                    len(schedules),
+                )
+                return schedules, schedules[0].week
+
+        # ---- 3. earliest future un-sent schedule -------------------
+        schedules = Schedules.search(
+            base_domain + [('week', '>=', _iso_week_monday(today))],
+            order='week asc',
+        )
+        if schedules:
+            _logger.info(
+                "Bundle Paperwork: deal id=%s - no Schedule in the current "
+                "broadcast quarter; using the earliest future Schedule week %s.",
+                deal.id, schedules[0].week,
+            )
+            return schedules, schedules[0].week
+
+        return Schedules.browse(), None
+
+    def _build_schedule_chunks(self, deal):
+        schedules, effective_start = self._resolve_bundle_schedules(deal)
         if not schedules:
+            q_start, q_end = _broadcast_quarter_bounds(
+                fields.Date.context_today(self)
+            )
             raise UserError(_(
-                "No current or future Schedules were found on this Deal. "
-                "Make sure at least one Schedule matches the Bundle Start "
-                "Week and has XML Sent unchecked."
-            ))
-        if schedules[0].week != deal.bundle_start_week:
-            raise UserError(_(
-                "There is no Schedule matching the Deal's Bundle Start "
-                "Week (%s). Fix the Schedule set or the Deal's start."
-            ) % deal.bundle_start_week)
+                "No usable Schedules were found on this Deal.\n\n"
+                "Checked:\n"
+                "  * the Deal's Bundle Start Week (%(bsw)s)\n"
+                "  * the current broadcast quarter (%(qs)s to %(qe)s)\n"
+                "  * any later un-sent Schedule\n\n"
+                "Make sure this Deal has at least one Schedule with "
+                "XML Sent unchecked."
+            ) % {
+                'bsw': deal.bundle_start_week or _('not set'),
+                'qs': q_start,
+                'qe': q_end,
+            })
+
+        # Keep the Deal's Bundle Start Week in step with what we
+        # actually used, so the Excel header block, the mini-popup
+        # default and any later regenerate all agree.
+        if effective_start and deal.bundle_start_week != effective_start:
+            deal.sudo().write({'bundle_start_week': effective_start})
 
         chunks = []
         cur = _ScheduleChunk(
             schedules[0].week,
             schedules[0].week + timedelta(days=6),
             1,
-            int(schedules[0].units_aired or 0),
+            int(_sched_units(schedules[0])),
             int(schedules[0].bpu_units or 0),
             [schedules[0]],
         )
@@ -573,14 +848,14 @@ class MvBundlePaperworkWizard(models.TransientModel):
                 chunks.append(cur)
                 cur = _ScheduleChunk(
                     s.week, s.week + timedelta(days=6), 1,
-                    int(s.units_aired or 0),
+                    int(_sched_units(s)),
                     int(s.bpu_units or 0),
                     [s],
                 )
             else:
                 cur.chunk_end = cur.chunk_end + timedelta(days=7)
                 cur.week_count += 1
-                cur.total_units += int(s.units_aired or 0)
+                cur.total_units += int(_sched_units(s))
                 cur.bpu_total_units += int(s.bpu_units or 0)
                 cur.schedules.append(s)
         chunks.append(cur)
@@ -851,7 +1126,7 @@ class MvBundlePaperworkWizard(models.TransientModel):
                                   bp_units, group, program_name):
         parts = []
         for sc in chunk.schedules:
-            units = int((sc.units_aired or 0) * bp_units)
+            units = int(_sched_units(sc) * bp_units)
             if group in _GROUPS_TO_LIMIT and program_name == 'Primary Tegna Connect':
                 units = int((sc.bpu_units or 0) * bp_units)
             end_wk = sc.week + timedelta(days=6) if sc.week else sc.week
@@ -1085,24 +1360,38 @@ class MvBundlePaperworkWizard(models.TransientModel):
                 cell.font = bold
                 cell.fill = header_fill
                 cell.alignment = center
-            # K = Bundle Start Week as a real date (populated in Python
-            # so the header row always renders even when the Schedule
-            # sheet's Week column can't be resolved via DATEVALUE +
-            # Quarter Set VLOOKUP). L..X = previous + 7.
-            first_monday = deal.bundle_start_week or fields.Date.context_today(self)
-            order.cell(
-                row=r_columns, column=11, value=first_monday,
-            ).font = bold
-            order.cell(row=r_columns, column=11).number_format = 'm/d/yyyy'
-            for offset in range(1, 14):
-                col = 11 + offset
-                prev = get_column_letter(col - 1)
+            # K..X = the week columns. These span the BROADCAST QUARTER
+            # that the paperwork belongs to - every Monday whose full
+            # Mon..Sun week fits inside the quarter - NOT an arbitrary
+            # 14 weeks counted forward from the first schedule.
+            #
+            # e.g. generating on 2026-08-31 puts us in broadcast Q3 2026
+            # (2026-06-29..2026-09-27), so the columns run
+            # 6-29-2026 ... 9-21-2026 (13 of them). 9-28 is excluded
+            # because its week spills into Q4.
+            #
+            # Each header is written as a real date (not a `=prev+7`
+            # formula) so the quarter boundary is exact and the trailing
+            # columns can be left genuinely empty.
+            quarter_ref = (
+                deal.bundle_start_week
+                or (chunks[0].chunk_start if chunks else None)
+                or fields.Date.context_today(self)
+            )
+            quarter_mondays = _quarter_mondays(quarter_ref)
+            max_week_cols = 14                     # K(11)..X(24)
+            week_mondays = quarter_mondays[:max_week_cols]
+            week_col_count = len(week_mondays)
+            for offset, monday in enumerate(week_mondays):
                 cell = order.cell(
-                    row=r_columns, column=col,
-                    value='=%s%d+7' % (prev, r_columns),
+                    row=r_columns, column=11 + offset, value=monday,
                 )
                 cell.font = bold
                 cell.number_format = 'm/d/yyyy'
+            # Blank any unused slot so a short quarter doesn't leave a
+            # stale header behind.
+            for offset in range(week_col_count, max_week_cols):
+                order.cell(row=r_columns, column=11 + offset, value=None)
             # Data rows - one per distinct time period. K-X show the
             # raw units-per-week straight from Sheet2 (no station-tier
             # multiplier); Station Rate is the per-30 rate scaled to
@@ -1143,7 +1432,11 @@ class MvBundlePaperworkWizard(models.TransientModel):
                     value='=IFERROR(SUM(K%d:X%d),0)' % (data_row, data_row),
                 )
                 # K..X: raw units-per-week from Sheet2. No multiplier.
-                for col in range(11, 25):
+                # Only emit a formula for columns that actually carry a
+                # week header - a 13-week quarter leaves X empty, and a
+                # SUMIF against a blank key would render a stray 0.
+                for offset in range(week_col_count):
+                    col = 11 + offset
                     col_letter = get_column_letter(col)
                     order.cell(
                         row=data_row, column=col,
@@ -1275,7 +1568,11 @@ class MvBundlePaperworkWizard(models.TransientModel):
                 sh2.cell(row=r, column=5, value=float(sc.rate or 0.0))
                 sh2.cell(row=r, column=6, value=total_dollars)
                 sh2.cell(row=r, column=7, value=sc.name or '')
-                sh2.cell(row=r, column=11, value=float(sc.units_aired or 0.0))
+                # K = aired units (falls back to available-minus-preempted
+                # so a stale stored compute can't zero out the row), L =
+                # bonus units, M = total consumed by the Order sheet's
+                # per-week SUMIF.
+                sh2.cell(row=r, column=11, value=_sched_units(sc))
                 sh2.cell(row=r, column=12, value=int(sc.bpu_units or 0))
                 sh2.cell(row=r, column=13, value='=SUM(K%d,L%d)' % (r, r))
                 r += 1

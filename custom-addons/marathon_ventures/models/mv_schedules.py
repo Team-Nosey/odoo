@@ -1741,13 +1741,20 @@ class MvSchedules(models.Model):
             # TODO: translate SF formula to Python
             rec.unit_sep_check = False
 
-    @api.depends()
+    @api.depends('status', 'units_available', 'units_preempted')
     def _compute_units_aired(self):
-        # SF formula (verbatim, may need translation):
+        # SF formula:
         #   case( Status__c, "Canceled", 0, Units_Available__c - Units_Preempted__c)
+        # A canceled schedule aired nothing; otherwise the aired count
+        # is the booked units minus whatever was preempted. Clamped at
+        # zero so an over-recorded preemption can't go negative.
         for rec in self:
-            # TODO: translate SF formula to Python
-            rec.units_aired = False
+            if rec.status == 'canceled':
+                rec.units_aired = 0.0
+                continue
+            available = float(rec.units_available or 0.0)
+            preempted = float(rec.units_preempted or 0.0)
+            rec.units_aired = max(0.0, available - preempted)
 
     @api.depends()
     def _compute_units_cap(self):

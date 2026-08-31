@@ -33,7 +33,7 @@
                     t-att-disabled="state.busy"
                     t-on-click.prevent="() => this.onGenerate()">
               <i class="fa fa-file-text-o me-2"/>
-              <span t-if="!state.busy">Generate Paperwork (New Buy)</span>
+              <span t-if="!state.busy">Generate Paperwork</span>
               <span t-else=""><i class="fa fa-spinner fa-spin"/> Generating...</span>
             </button>
           </div>
@@ -44,8 +44,9 @@
               <i class="fa fa-file-o mv-bp__empty-icon"/>
               <p class="mb-1"><b>No paperwork generated yet.</b></p>
               <p class="text-muted mb-0">
-                Click <b>Generate Paperwork (New Buy)</b> above to build
-                the XML files (one per station) and the Excel summary.
+                Click <b>Generate Paperwork</b> above to build
+                the station XML archive (one zip containing every
+                station's XML) and the Excel summary.
                 Files will also appear under this Deal's <b>Related</b>
                 tab and Attachments box.
               </p>
@@ -128,9 +129,11 @@
                     </span>
                     <t t-foreach="state.snapshot.bundle_actions"
                        t-as="a" t-key="a.code">
-                      <button class="btn btn-sm btn-outline-info"
+                      <button t-att-class="bundleActionClass(a)"
                               t-att-disabled="state.busy"
+                              t-att-aria-pressed="isActiveBundleAction(a) ? 'true' : 'false'"
                               t-on-click.prevent="() => this.onBundleAction(a)">
+                        <i t-if="isActiveBundleAction(a)" class="fa fa-check me-1"/>
                         <t t-esc="a.label"/>
                       </button>
                     </t>
@@ -156,12 +159,17 @@
        Mini popup - Bundle Start Week
        ================================================================ -->
   <t t-name="marathon_ventures.BundleStartWeekDialog">
-    <Dialog title="props.actionLabel || 'Bundle Action'" size="'sm'">
+    <Dialog title="props.actionLabel || 'Generate Bundle Paperwork'" size="'sm'">
       <div class="mv-bsw">
-        <p class="mv-bsw__hint">
+        <p class="mv-bsw__hint" t-if="props.actionLabel">
           Pick a <b>Bundle Start Week</b> for the
           <b class="text-info"><t t-esc="props.actionLabel"/></b>
           action.
+        </p>
+        <p class="mv-bsw__hint" t-else="">
+          Pick the <b>Bundle Start Week</b> to generate the paperwork
+          from. The Excel week columns will span the broadcast quarter
+          containing this week.
         </p>
         <div class="form-group">
           <label class="fw-bold mb-1" for="mv_bsw_input">
@@ -179,10 +187,12 @@
       </div>
       <t t-set-slot="footer">
         <button class="btn btn-primary"
+                t-att-disabled="state.busy"
                 t-on-click.prevent="() => this.onConfirm()">
-          <i class="fa fa-check me-1"/>Submit
+          <i class="fa fa-check me-1"/><t t-esc="confirmText"/>
         </button>
         <button class="btn btn-secondary"
+                t-att-disabled="state.busy"
                 t-on-click.prevent="() => this.onCancel()">
           Cancel
         </button>

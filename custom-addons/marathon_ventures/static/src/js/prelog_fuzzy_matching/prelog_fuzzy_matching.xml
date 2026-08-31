@@ -154,15 +154,15 @@
                   <td><span class="mv-fuzzy__advertiser-product" t-att-title="row.advertiser_product" t-esc="row.advertiser_product"/></td>
                   <td>
                     <t t-if="row.attached">
-                      <a class="mv-fuzzy__record-link" target="_blank" rel="noopener"
-                         t-att-href="scheduleOpenUrl(row.attached)" t-on-click.stop="() => {}" t-esc="row.attached.name"/>
+                      <button class="mv-fuzzy__record-link mv-fuzzy__linklike"
+                              t-on-click.stop="() => this.openSchedule(row.attached)" t-esc="row.attached.name"/>
                       <span t-if="row.attached.overrun_amount > 0"
                             class="mv-fuzzy__overrun-badge"
                             t-att-title="'Schedule is over capacity by ' + row.attached.overrun_amount + ' unit(s)'">+<t t-esc="row.attached.overrun_amount"/></span>
                     </t>
                     <t t-elif="row.suggested">
-                      <a class="mv-fuzzy__record-link" target="_blank" rel="noopener"
-                         t-att-href="scheduleOpenUrl(row.suggested)" t-on-click.stop="() => {}" t-esc="row.suggested.name"/>
+                      <button class="mv-fuzzy__record-link mv-fuzzy__linklike"
+                              t-on-click.stop="() => this.openSchedule(row.suggested)" t-esc="row.suggested.name"/>
                       <span t-if="row.suggested.overrun_amount > 0"
                             class="mv-fuzzy__overrun-badge"
                             t-att-title="'Schedule would overrun by ' + row.suggested.overrun_amount + ' unit(s) if all pending suggestions attach'">+<t t-esc="row.suggested.overrun_amount"/></span>
@@ -209,8 +209,8 @@
               <span class="mv-fuzzy__quality mv-fuzzy__quality--fuzzy" t-if="state.drawerRow.status === 'suggestion' and state.drawerRow.match_quality === 'fuzzy'">Fuzzy</span>
             </h3>
             <t t-set="schedule" t-value="state.drawerRow.attached or state.drawerRow.suggested"/>
-            <dl class="mv-fuzzy__details"><dt>Name</dt><dd><a class="mv-fuzzy__record-link" target="_blank" rel="noopener"
-              t-att-href="scheduleOpenUrl(schedule)" t-on-click.stop="() => {}" t-esc="schedule.name"/></dd>
+            <dl class="mv-fuzzy__details"><dt>Name</dt><dd><button class="mv-fuzzy__record-link mv-fuzzy__linklike"
+              t-on-click.stop="() => this.openSchedule(schedule)" t-esc="schedule.name"/></dd>
               <dt>Rotation</dt><dd t-esc="schedule.time_range or '—'"/><dt>Days</dt><dd t-esc="schedule.days_allowed or '—'"/>
               <dt>Length / Rate</dt><dd><t t-esc="schedule.length"/> · $<t t-esc="formatRate(schedule.rate)"/></dd><dt>Deal #</dt><dd t-esc="schedule.deal_number"/>
             </dl>
