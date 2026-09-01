@@ -386,12 +386,23 @@ class TestPostlogMatching(TransactionCase):
         row = self._search()['rows'][0]
         self.assertNotEqual(row['match_quality'], 'exact')
 
-    def test_canceled_schedule_is_found_but_not_attachable(self):
+    def test_canceled_schedule_is_not_a_candidate_at_all(self):
+        """A canceled schedule is excluded, not offered-and-refused.
+
+        It used to surface as a suggestion the drawer then refused to attach,
+        which reads as "here is your match" followed by "no you cannot have it".
+        It is not attachable and it is not useful, so it is no longer a
+        candidate on either side - the import and the workbench now agree on
+        eligibility because they share one candidate query.
+        """
         self.schedule.status = 'canceled'
         self._create_postlog()
+
         row = self._search()['rows'][0]
-        self.assertFalse(row['suggestion_attachable'])
-        self.assertIn('cancel', (row['reason'] or '').lower())
+
+        self.assertEqual(row['status'], 'no_suggestion')
+        self.assertFalse(row['suggested'])
+        self.assertFalse(row['alternatives'])
 
     def test_missing_deal_number_gives_no_candidates(self):
         self._create_postlog(network_deal_number=False)

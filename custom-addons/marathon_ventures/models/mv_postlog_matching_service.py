@@ -1070,6 +1070,150 @@ class MvPostlogMatching(models.Model):
             ))
         return result
 
+    # ------------------------------------------------------------------
+    # Stored matching, written by the import
+    # ------------------------------------------------------------------
+
+    _POSTLOG_FLAG_TOKENS = (
+        'day', 'time', 'time_buffer', 'rate', 'length',
+        'ambiguous', 'missing_deal', 'no_schedules',
+    )
+
+    @api.model
+    def _postlog_flags(self, tokens):
+        """Comma-sentinelled token string, so ilike '%,time,%' is exact-token
+        and cannot also match 'time_buffer'. '' means analysed and clean;
+        NULL (never written) means never analysed."""
+        unknown = [token for token in tokens if token not in self._POSTLOG_FLAG_TOKENS]
+        if unknown:
+            raise ValueError('Unknown match flag(s): %s' % ', '.join(unknown))
+        return (',%s,' % ','.join(tokens)) if tokens else ''
+
+    @api.model
+    def _postlog_analysis_flags(self, analysis):
+        """The checks a candidate fails, as flag tokens.
+
+        Time gets two tokens: `time` when the spot aired outside the rotation
+        beyond the buffer, `time_buffer` when outside but within it. Both count
+        as one difference; separating them lets the Time filter be strict
+        without the difference count lying.
+        """
+        tokens = []
+        if not analysis['day_match']:
+            tokens.append('day')
+        if not analysis['exact_time_match']:
+            tokens.append('time_buffer' if analysis['time_match'] else 'time')
+        if not analysis['rate_match']:
+            tokens.append('rate')
+        if not analysis['length_match']:
+            tokens.append('length')
+        return tokens
+
+    @api.model
+    def _postlog_candidate_payload(self, analysis):
+        """One stored candidate: JSON-native, no recordsets."""
+        payload = self._fuzzy_schedule_payload(analysis['schedule'])
+        payload.update({
+            'flags': self._postlog_flags(self._postlog_analysis_flags(analysis)),
+            'time_distance': analysis['time_distance'],
+        })
+        return payload
+
+    @api.model
+    def _postlog_store_matching(self, postlogs, program, week):
+        """Analyse each row once and store the verdict. Called by the import.
+
+        This is the ONLY matcher. It decides attachment AND produces the
+        suggestions, replacing PostlogImportEngine._match_schedule, whose
+        stricter rules disagreeing with this one is what left the 8/17 upload
+        showing "Exact / Ready to attach" on rows the importer had refused.
+
+        Attachment needs a clean analysis AND a sold schedule: a clean match on
+        a canceled schedule is not attached, matching what the workbench
+        already refuses by hand. Ties attach to the first ranked candidate, with
+        an `ambiguous` flag recording that a choice was made - which is also the
+        signal a duplicate-schedule check would key on.
+
+        Returns {'matched': n, 'unmatched': n}.
+        """
+        candidate_map = self._fuzzy_candidate_map(postlogs, program, week)
+        accepted_networks = self._fuzzy_network_names(program)
+        counts = {'matched': 0, 'unmatched': 0}
+
+        for postlog in postlogs:
+            deal_number = (postlog.network_deal_number or '').strip()
+            blank = {
+                'schedule': False,
+                'suggested_schedule': False,
+                'possible_schedules': False,
+                'info': False,
+                'import_match_status': 'unmatched',
+            }
+
+            if not deal_number:
+                postlog.write(dict(blank, match_flags=self._postlog_flags(['missing_deal'])))
+                counts['unmatched'] += 1
+                continue
+
+            eligible = [
+                analysis
+                for analysis in (
+                    self._fuzzy_analyze_schedule(
+                        postlog, program, schedule, accepted_networks,
+                    )
+                    for schedule in candidate_map.get(deal_number, [])
+                )
+                if analysis['network_match']
+            ]
+            if not eligible:
+                postlog.write(dict(blank, match_flags=self._postlog_flags(['no_schedules'])))
+                counts['unmatched'] += 1
+                continue
+
+            eligible.sort(key=self._fuzzy_analysis_sort_key)
+            best = eligible[0]
+            winning_key = self._fuzzy_analysis_quality_key(best)
+            tied = sum(
+                1 for analysis in eligible
+                if self._fuzzy_analysis_quality_key(analysis) == winning_key
+            )
+            flags = self._postlog_analysis_flags(best)
+            is_clean = not flags
+            if tied > 1:
+                flags = flags + ['ambiguous']
+
+            if is_clean and best['schedule'].status == 'sold':
+                postlog.write({
+                    'schedule': best['schedule'].id,
+                    'suggested_schedule': best['schedule'].id,
+                    'possible_schedules': False,
+                    'match_flags': self._postlog_flags(flags),
+                    'info': False,
+                    'import_match_status': 'matched',
+                })
+                counts['matched'] += 1
+                continue
+
+            offered = [
+                analysis
+                for analysis in eligible[:self._FUZZY_MAX_ALTERNATIVES + 1]
+                if len(self._postlog_analysis_flags(analysis))
+                <= self._FUZZY_MAX_ALTERNATIVE_DIFFERENCES
+            ] or [best]
+            postlog.write({
+                'schedule': False,
+                'suggested_schedule': best['schedule'].id,
+                'possible_schedules': [
+                    self._postlog_candidate_payload(analysis) for analysis in offered
+                ],
+                'match_flags': self._postlog_flags(flags),
+                'info': _('%(count)s suggestion(s)') % {'count': len(offered)},
+                'import_match_status': 'unmatched',
+            })
+            counts['unmatched'] += 1
+
+        return counts
+
     @api.model
     def _fuzzy_candidate_map(self, postlogs, program, selected_week):
         if not program or not selected_week:
@@ -1081,10 +1225,15 @@ class MvPostlogMatching(models.Model):
         })
         if not deal_numbers:
             return {}
+        # Sold only. A canceled schedule is not a candidate at all - it is not
+        # attachable and it is not a useful suggestion, so it should not appear
+        # in the drawer either. This matches what the import has always done and
+        # makes both sides agree on eligibility.
         schedules = self.env['mv.schedules'].search([
             ('week', '=', selected_week),
             ('deal_parent.program', '=', program.id),
             ('deal_parent.network_deal_number', 'in', deal_numbers),
+            ('status', '=', 'sold'),
         ], order='id')
         result = {}
         for schedule in schedules:
