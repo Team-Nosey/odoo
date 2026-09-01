@@ -451,10 +451,20 @@ class PostlogImportEngine:
         if not network_deal_number:
             return False, "Missing network deal number."
 
+        # NOTE 2026-09-01: deal status filter commented out, not deleted.
+        # Deals imported from Salesforce have no `status` set, so requiring
+        # "sold" here rejected every row at import: the spot landed unattached
+        # and then showed up in the workbench as a fuzzy suggestion reading
+        # "Exact / Ready to attach", because the workbench matcher does not
+        # filter deal status at all. PrelogImportEngine does not filter it
+        # either. Revisit once we decide whether mv.deal.status is a field we
+        # keep and backfill - if we keep it, re-enable this AND add the same
+        # filter to the workbench matcher so the two agree. Schedule status is
+        # still required to be "sold" below, same as prelog.
         deals = self.env["mv.deal"].search(
             [
                 ("network_deal_number", "=", network_deal_number),
-                ("status", "=", "sold"),
+                # ("status", "=", "sold"),
             ],
             order="id",
         )

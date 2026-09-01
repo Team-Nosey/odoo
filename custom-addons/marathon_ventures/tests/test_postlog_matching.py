@@ -932,6 +932,39 @@ class TestPostlogMatching(TransactionCase):
         with self.assertRaises(UserError):
             self.Postlog.with_user(user).fuzzy_match_get_options()
 
+    def test_engine_matches_when_deal_status_is_unset(self):
+        """A Salesforce-imported deal has no status; the import must still attach.
+
+        Regression for the 8/17 prod upload: requiring ``deal.status == 'sold'``
+        rejected every row at import, so each spot landed unattached and then
+        surfaced in the workbench as a fuzzy suggestion reading "Exact / Ready
+        to attach" - because the workbench matcher does not filter deal status.
+        """
+        from ..services.postlog_import.engine import PostlogImportEngine
+        self.deal.status = False
+        self.assertFalse(self.deal.status)
+        engine = PostlogImportEngine(
+            self.env,
+            program=self.program,
+            upload_file=b'',
+            upload_filename='postlogs.csv',
+        )
+        vals = engine.build_row_vals(
+            {
+                'air_date': '07/27/26',
+                'air_time': '09:30:00',
+                'network_deal_number': 'SPT-100',
+                'length': ':30',
+                'spot_rate': '100',
+            },
+            self.week,
+            2,
+        )
+        self.assertEqual(vals['import_match_status'], 'matched')
+        self.assertEqual(vals['schedule'], self.schedule.id)
+
+
+
 
 @tagged('post_install', '-at_install')
 class TestPostlogImportRouting(TransactionCase):
