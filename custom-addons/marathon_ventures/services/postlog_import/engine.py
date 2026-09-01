@@ -194,26 +194,14 @@ class PostlogImportEngine:
             else self._safe_optional_value("broadcast_network", row.get("broadcast_network"), parse_errors)
         )
 
-        schedule, match_detail = self._match_schedule(
-            network=(
-                selected_program_name
-                if self.config.get("useProgramForNetwork")
-                else self._safe_optional_value("network", row.get("network"), parse_errors) or selected_program_name
-            ),
-            network_deal_number=network_deal_number,
-            air_date=air_date,
-            air_time=air_time,
-            length=length,
-            spot_rate=spot_rate,
-            import_week=import_week,
-        )
-
+        # Matching moved out of the engine. mv.spot_data._postlog_store_matching
+        # runs once over the whole batch after the rows exist, so there is a
+        # single matcher deciding both attachment and suggestions. The row is
+        # created unmatched and the job resolves it a moment later.
         detail_parts = list(parse_errors)
-        if match_detail:
-            detail_parts.append(match_detail)
 
         return {
-            "schedule": schedule.id if schedule else False,
+            "schedule": False,
             "air_date": air_date,
             "air_time": air_time,
             "length": length,
@@ -238,7 +226,7 @@ class PostlogImportEngine:
             "batch_id": self.upload_filename or False,
             "import_program": self.program.id if self.program else False,
             "import_week_value": import_week,
-            "import_match_status": self._MATCHED if schedule else self._UNMATCHED,
+            "import_match_status": self._UNMATCHED,
             "import_match_detail": "; ".join(part for part in detail_parts if part) or False,
         }
 

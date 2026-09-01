@@ -931,8 +931,10 @@ class TestPostlogMatching(TransactionCase):
         self.assertEqual(vals['import_program'], self.program.id)
         self.assertEqual(vals['import_week_value'], self.week)
         self.assertEqual(vals['length'], 'v_30')
-        self.assertEqual(vals['import_match_status'], 'matched')
-        self.assertTrue(vals['schedule'])
+        # The engine no longer matches: rows are created unmatched and resolved
+        # by _postlog_store_matching once the whole batch exists.
+        self.assertEqual(vals['import_match_status'], 'unmatched')
+        self.assertFalse(vals['schedule'])
 
     # ---- access --------------------------------------------------------
 
@@ -950,29 +952,18 @@ class TestPostlogMatching(TransactionCase):
         rejected every row at import, so each spot landed unattached and then
         surfaced in the workbench as a fuzzy suggestion reading "Exact / Ready
         to attach" - because the workbench matcher does not filter deal status.
+
+        Matching has since moved out of the engine into _postlog_store_matching,
+        so the guarantee is asserted there. Same rule, one layer down.
         """
-        from ..services.postlog_import.engine import PostlogImportEngine
         self.deal.status = False
         self.assertFalse(self.deal.status)
-        engine = PostlogImportEngine(
-            self.env,
-            program=self.program,
-            upload_file=b'',
-            upload_filename='postlogs.csv',
-        )
-        vals = engine.build_row_vals(
-            {
-                'air_date': '07/27/26',
-                'air_time': '09:30:00',
-                'network_deal_number': 'SPT-100',
-                'length': ':30',
-                'spot_rate': '100',
-            },
-            self.week,
-            2,
-        )
-        self.assertEqual(vals['import_match_status'], 'matched')
-        self.assertEqual(vals['schedule'], self.schedule.id)
+        postlog = self._create_postlog()
+
+        self.Postlog._postlog_store_matching(postlog, self.program, self.week)
+
+        self.assertEqual(postlog.schedule, self.schedule)
+        self.assertEqual(postlog.import_match_status, 'matched')
 
     def test_alternatives_rank_by_how_many_checks_they_fail(self):
         """One mismatch outranks two, whatever the mismatch happens to be.
