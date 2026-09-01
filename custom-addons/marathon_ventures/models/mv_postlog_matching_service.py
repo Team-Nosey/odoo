@@ -481,7 +481,7 @@ class MvPostlogMatching(models.Model):
             }
             postlog.write({
                 'schedule': False,
-                'import_match_status': 'created_without_schedule',
+                'import_match_status': 'unmatched',
                 'import_match_detail': '\n'.join(
                     part for part in (postlog.import_match_detail, line) if part
                 ),

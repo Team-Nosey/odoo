@@ -102,7 +102,7 @@ class TestPostlogMatching(TransactionCase):
             'spot_rate': 100.0,
             'product': 'Test Advertiser / Product',
             'status': 'aired',
-            'import_match_status': 'created_without_schedule',
+            'import_match_status': 'unmatched',
         }
         values.update(overrides)
         return self.Postlog.create(values)
@@ -646,7 +646,7 @@ class TestPostlogMatching(TransactionCase):
                 'spot_rate': 100.0,
                 'product': 'Bulk %s' % index,
                 'status': 'aired',
-                'import_match_status': 'created_without_schedule',
+                'import_match_status': 'unmatched',
             }
             for index in range(205)
         ])
@@ -763,7 +763,7 @@ class TestPostlogMatching(TransactionCase):
                 'spot_rate': 100.0,
                 'product': 'Page %s' % index,
                 'status': 'aired',
-                'import_match_status': 'created_without_schedule',
+                'import_match_status': 'unmatched',
             }
             for index in range(205)
         ])
@@ -891,7 +891,7 @@ class TestPostlogMatching(TransactionCase):
         )
         self.assertFalse(vals['air_date'])
         self.assertTrue(vals['import_match_detail'])
-        self.assertEqual(vals['import_match_status'], 'created_without_schedule')
+        self.assertEqual(vals['import_match_status'], 'unmatched')
         # the rest of the row still came through
         self.assertEqual(vals['network_deal_number'], 'SPT-100')
         self.assertEqual(vals['length'], 'v_60')

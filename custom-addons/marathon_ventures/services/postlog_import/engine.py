@@ -77,8 +77,7 @@ class PostlogImportEngine:
     # Mirrors PrelogImportEngine's status vocabulary so both jobs report the
     # same three outcomes into `import_match_status`.
     _MATCHED = "matched"
-    _CREATED_WITHOUT_SCHEDULE = "created_without_schedule"
-    _FAILED_TO_CREATE = "failed_to_create"
+    _UNMATCHED = "unmatched"
 
     def __init__(self, env, *, program, upload_file, upload_filename):
         self.env = env
@@ -239,7 +238,7 @@ class PostlogImportEngine:
             "batch_id": self.upload_filename or False,
             "import_program": self.program.id if self.program else False,
             "import_week_value": import_week,
-            "import_match_status": self._MATCHED if schedule else self._CREATED_WITHOUT_SCHEDULE,
+            "import_match_status": self._MATCHED if schedule else self._UNMATCHED,
             "import_match_detail": "; ".join(part for part in detail_parts if part) or False,
         }
 

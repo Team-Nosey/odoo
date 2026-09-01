@@ -95,16 +95,50 @@ class MvSpotData(models.Model):
     import_job = fields.Many2one(string='Import Job', comodel_name='mv.postlog_import_job', ondelete='set null', index=True)
     import_program = fields.Many2one(string='Import Program', comodel_name='mv.programs', ondelete='restrict', index=True)
     import_week_value = fields.Date(string='Import Week', index=True)
+    # Stored, never computed on the fly: the workbench reads this rather than
+    # re-deriving it per request. Two codes only - `failed_to_create` was
+    # declared but never written, and could not be: a row that fails to be
+    # created has no record to carry a status. Those land in the import job's
+    # error_count and the errors CSV instead.
     import_match_status = fields.Selection(
         string='Import Match Status',
         selection=[
             ('matched', 'Matched'),
-            ('created_without_schedule', 'Created Without Schedule'),
-            ('failed_to_create', 'Failed to Create'),
+            ('unmatched', 'Unmatched'),
         ],
+        index=True,
     )
     import_match_detail = fields.Text(string='Import Match Detail')
     batch_id = fields.Char(string='Batch', size=255)
+
+    # === Stored match results, written by the Postlog import ===
+    # The import does the matching once; the workbench displays it. Nothing here
+    # is recomputed on page load, so a schedule edited after import does NOT
+    # update these - that is a deliberate trade for page speed.
+    #
+    # `suggested_schedule` is the indexed handle on possible_schedules[0]. It is
+    # not displayed (the Schedule column shows only real attachments) but it is
+    # what makes the Suggestions / No Suggestion tabs plain domains and what bulk
+    # Attach writes from, instead of parsing JSON per row.
+    suggested_schedule = fields.Many2one(
+        string='Suggested Schedule', comodel_name='mv.schedules',
+        ondelete='set null', index=True,
+    )
+    # Ordered, best first; index 0 is the suggestion. Populated ONLY for
+    # unmatched rows - a matched row's drawer shows the attachment, never the
+    # candidate list, and storing it for every row would cost ~2 MB per week of
+    # JSON nobody reads. Cleared on manual attach.
+    possible_schedules = fields.Json(string='Possible Schedules')
+    # Comma-sentinelled tokens, e.g. ',time,rate,' - so ilike '%,time,%' is an
+    # exact-token match and cannot also hit 'time_buffer'. Drives the issue
+    # dropdown. Vocabulary: day, time, time_buffer, rate, length, ambiguous,
+    # missing_deal, no_schedules. NULL means "never analysed" (rows that predate
+    # stored matching), which is distinct from '' meaning "analysed, no issues".
+    match_flags = fields.Char(string='Match Flags', size=255, index=True)
+    # Free display text for the workbench INFO column. Deliberately general -
+    # currently a suggestion count for unmatched rows, blank for matched - so it
+    # can carry non-matching notes later without another field.
+    info = fields.Char(string='Info', size=255)
 
     # === Computed / Roll-Up ===
 

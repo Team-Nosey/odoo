@@ -58,7 +58,7 @@ class TestPostlogWorkbenchUI(HttpCase):
             'spot_rate': 100.0,
             'product': 'UI Fixture Product',
             'status': 'aired',
-            'import_match_status': 'created_without_schedule',
+            'import_match_status': 'unmatched',
         })
         cls.action = cls.env.ref('marathon_ventures.action_mv_postlog_workbench')
 
