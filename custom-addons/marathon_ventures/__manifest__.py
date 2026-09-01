@@ -7,7 +7,10 @@
     'author': 'Marathon Ventures (generated)',
     'website': '',
     'category': 'Custom',
-    'depends': ["base", "mail", "contacts", "crm", "sale_management", "product", "calendar"],
+    # auth_oauth is required by models/phase30_oauth_user_link.py, which
+    # links Google sign-ins to existing users instead of demanding an
+    # invitation. Removing auth_oauth would break that override.
+    'depends': ["base", "mail", "contacts", "crm", "sale_management", "product", "calendar", "auth_oauth"],
     'data': [
         # Groups must load before ACLs that reference them.
         'security/mv_security.xml',
