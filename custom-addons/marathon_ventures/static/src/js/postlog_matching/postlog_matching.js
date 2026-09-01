@@ -29,6 +29,7 @@ export class MvPostlogMatching extends Component {
             searchTerm: "",
             airDate: "",
             issueFilter: "",
+            refreshing: false,
             sortBy: "air_date",
             sortDirection: "asc",
             rows: [],
@@ -290,6 +291,26 @@ export class MvPostlogMatching extends Component {
             this.state.drawerRow = false;
             await this._loadResults();
         } finally { this.state.mutating = false; }
+    }
+
+    /** Re-run matching for the unmatched rows of the selected Program/week.
+     *  Stored matching does not self-heal, so this is how a Schedule corrected
+     *  after import gets picked up. Unmatched-only, so it cannot undo an
+     *  attachment someone made by hand. */
+    async onRefresh() {
+        const f = this.state.filters;
+        this.state.refreshing = true;
+        try {
+            const result = await this.orm.call("mv.spot_data", "fuzzy_match_refresh", [
+                f.programId || false, f.weekStart || false, f.importJobId || false,
+            ]);
+            this.notification.add(result.message, {
+                type: result.attached ? "success" : "info",
+            });
+            await this._loadResults();
+        } finally {
+            this.state.refreshing = false;
+        }
     }
 
     async detachSchedule(row) {

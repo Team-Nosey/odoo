@@ -8,6 +8,13 @@ shared, and adds the cases that only exist on the postlog side:
   * post-midnight (vendor "XM") air times against overnight rotations.
   * re-importing a week is blocked rather than replacing it.
   * there is no ``version`` and no ``removed``.
+  * matching is stored by the import, not recomputed on page load. A clean
+    match is attached at import, so a row can only be a pending suggestion if
+    it has a real difference - fixtures below build genuinely fuzzy rows for
+    that reason. Two tests were dropped when this changed: one asserted the
+    self-heal contract (editing a Schedule re-matched on refresh) and one
+    asserted the "Ready to attach" filter, a state that is now unreachable
+    because a clean candidate is always sold and therefore always attached.
 
 Program naming matters here. ``load_program_config`` slugifies the program name,
 so a program called "True Crime Network" picks up postlog_configs/
@@ -24,6 +31,9 @@ from datetime import date
 from odoo import Command
 from odoo.exceptions import UserError
 from odoo.tests import TransactionCase, new_test_user, tagged
+
+
+
 
 
 @tagged('post_install', '-at_install')
@@ -105,7 +115,24 @@ class TestPostlogMatching(TransactionCase):
             'import_match_status': 'unmatched',
         }
         values.update(overrides)
-        return self.Postlog.create(values)
+        postlog = self.Postlog.create(values)
+        # Mirror the import: a row is matched once, on creation, and the
+        # workbench reads what was stored. Fixtures that pin a schedule
+        # explicitly are left alone - those are asserting a given end state, not
+        # exercising the matcher.
+        # attach=False on purpose. These fixtures stand in for "a row the
+        # import created and left unattached", which is the only state the
+        # workbench actually works on - a clean match is attached at import and
+        # never reaches the suggestion queue. Attachment-at-import is asserted
+        # directly against _postlog_store_matching where that is the point.
+        if 'schedule' not in overrides:
+            self.Postlog._postlog_store_matching(
+                postlog,
+                postlog.import_program or self.program,
+                postlog.import_week_value or self.week,
+                attach=False,
+            )
+        return postlog
 
     def _search(self, **kwargs):
         return self.Postlog.fuzzy_match_search(
@@ -229,30 +256,6 @@ class TestPostlogMatching(TransactionCase):
         self.assertNotEqual(row['match_quality'], 'exact')
         self.assertIn('day', (row['reason'] or '').lower())
 
-    def test_fixing_a_schedule_makes_it_exact_but_does_not_auto_attach(self):
-        """Correcting a Schedule must show the row as ready, never attach it.
-
-        Same contract as prelog: the row stays a Fuzzy Suggestion, the quality
-        chip flips to exact and the reason clears, and a human still has to
-        press Attach.
-        """
-        self.schedule.days_allowed = [Command.set(self.monday.ids)]
-        postlog = self._create_postlog(air_date=date(2026, 7, 28))      # Tuesday
-        row = self._search()['rows'][0]
-        self.assertEqual(row['match_quality'], 'fuzzy')
-        self.assertTrue(row['day_mismatch'])
-
-        # the operator adds Tuesday to the rotation and re-runs
-        self.schedule.days_allowed = [Command.link(self.tuesday.id)]
-        row = self._search()['rows'][0]
-        self.assertEqual(row['match_quality'], 'exact')           # chip says Exact
-        self.assertFalse(row['reason'])                           # UI shows "Ready to attach"
-        self.assertEqual(row['status'], 'suggestion')             # stays in Fuzzy Suggestions
-        self.assertEqual(row['status_label'], 'Fuzzy Suggestion')
-        self.assertTrue(row['suggestion_attachable'])
-        self.assertFalse(postlog.schedule)                           # NOT auto-attached
-        self.assertEqual(self._search()['counts']['matched'], 0)
-
 
     def test_mis_keyed_rate_does_not_push_the_postlog_to_another_rotation(self):
         """Regression for the 9:22pm case reported on the 8/24 prelogs.
@@ -328,14 +331,6 @@ class TestPostlogMatching(TransactionCase):
         }], self.program.id, self.week.isoformat())
         self.assertEqual(result['attached'], 1)
         self.assertEqual(postlog.schedule, other)
-
-    def test_ready_to_attach_issue_filter(self):
-        """'Ready to attach' isolates exact-but-unattached rows for bulk attach."""
-        ready = self._create_postlog()                              # exact
-        self._create_postlog(spot_rate=999.0)                       # fuzzy, rate
-        self._create_postlog(schedule=self.schedule.id, import_match_status='matched')
-        rows = self._search(issue_filter='ready')['rows']
-        self.assertEqual([r['id'] for r in rows], [ready.id])
 
     def test_missing_air_date_still_gives_no_suggestion(self):
         """A missing date is not a day *mismatch* - there is nothing to compare,
@@ -1028,6 +1023,73 @@ class TestPostlogMatching(TransactionCase):
         alt_ids = [a['id'] for a in row['alternatives']]
         self.assertIn(near.id, alt_ids, "a one-difference near miss must be offered")
         self.assertNotIn(far.id, alt_ids, "a three-difference candidate must be dropped")
+
+
+    def test_refresh_attaches_rows_whose_schedule_was_corrected(self):
+        """Stored matching does not self-heal; Refresh is how a fix is picked up.
+
+        The row imports unmatched because the day is wrong. Someone corrects the
+        rotation. Nothing changes until Refresh runs, because the verdict is
+        stored - and then it attaches, because a clean match is attached the
+        same way the import would have attached it.
+        """
+        self.schedule.days_allowed = [Command.set(self.monday.ids)]
+        postlog = self._create_postlog(air_date=date(2026, 7, 28))       # Tuesday
+        self.assertFalse(postlog.schedule)
+        self.assertIn('day', postlog.match_flags)
+
+        # Correcting the Schedule alone changes nothing that is already stored.
+        self.schedule.days_allowed = [Command.link(self.tuesday.id)]
+        self.assertFalse(postlog.schedule)
+        self.assertIn('day', postlog.match_flags)
+
+        result = self.Postlog.fuzzy_match_refresh(self.program.id, self.week.isoformat())
+
+        self.assertEqual(result['checked'], 1)
+        self.assertEqual(result['attached'], 1)
+        self.assertEqual(postlog.schedule, self.schedule)
+        self.assertEqual(postlog.import_match_status, 'matched')
+        self.assertIn('Refresh', postlog.import_match_detail or '')
+
+    def test_refresh_never_touches_matched_rows(self):
+        """Unmatched-only, so Refresh cannot undo a human's attachment.
+
+        The manually attached row here is deliberately a poor match - if Refresh
+        re-ran matching over it, it would move the row somewhere else.
+        """
+        manual = self._create_postlog(
+            schedule=self.other_schedule.id, import_match_status='matched',
+        )
+        unmatched = self._create_postlog(spot_rate=999.0)
+        self.assertFalse(unmatched.schedule)
+
+        result = self.Postlog.fuzzy_match_refresh(self.program.id, self.week.isoformat())
+
+        self.assertEqual(result['checked'], 1, "only the unmatched row is re-checked")
+        self.assertEqual(manual.schedule, self.other_schedule)
+        self.assertEqual(manual.import_match_status, 'matched')
+
+    def test_detach_does_not_immediately_reattach(self):
+        """Detach re-analyses with attach=False, or it would undo itself.
+
+        The row was attached because it matched cleanly, so re-running the
+        matcher with attaching enabled would put the schedule straight back and
+        Detach would appear to do nothing.
+        """
+        postlog = self._create_postlog(
+            schedule=self.schedule.id, import_match_status='matched',
+        )
+
+        self.Postlog.fuzzy_match_detach(
+            [postlog.id], self.program.id, self.week.isoformat(),
+        )
+
+        self.assertFalse(postlog.schedule)
+        self.assertEqual(postlog.import_match_status, 'unmatched')
+        self.assertEqual(postlog.suggested_schedule, self.schedule,
+                         "it should still know what it would match")
+
+
 
 
 

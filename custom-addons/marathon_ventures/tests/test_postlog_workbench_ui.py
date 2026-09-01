@@ -60,6 +60,12 @@ class TestPostlogWorkbenchUI(HttpCase):
             'status': 'aired',
             'import_match_status': 'unmatched',
         })
+        # The workbench reads stored matching now, so the fixture has to carry
+        # it. attach=False keeps the row in the suggestion queue, which is what
+        # the tour drives.
+        cls.env['mv.spot_data']._postlog_store_matching(
+            cls.postlog, cls.program, cls.week, attach=False,
+        )
         cls.action = cls.env.ref('marathon_ventures.action_mv_postlog_workbench')
 
     def test_workbench_tour(self):

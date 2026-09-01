@@ -42,6 +42,11 @@
                       t-att-disabled="state.exporting or state.querying or state.mutating or !state.hasFiltered">
                 <i class="fa fa-download me-1"/><t t-esc="state.exporting ? 'Exporting…' : 'Export View'"/>
               </button>
+              <button class="btn btn-outline-secondary" t-on-click="onRefresh"
+                      t-att-disabled="state.refreshing or state.querying or state.mutating"
+                      title="Re-check unmatched rows against the current Schedules">
+                <i class="fa fa-refresh me-1" t-att-class="state.refreshing ? 'fa-spin' : ''"/><t t-esc="state.refreshing ? 'Re-checking…' : 'Refresh'"/>
+              </button>
             </div>
           </div>
         </section>
@@ -68,7 +73,7 @@
             <select class="mv-fuzzy__compact-input" t-on-change="(ev) => this.state.issueFilter = ev.target.value">
               <option value="">All issues</option><option value="time">Time issue</option>
               <option value="length">Length issue</option><option value="ambiguous">Tied schedules</option>
-              <option value="rate">Rate mismatch</option><option value="day">Day mismatch</option><option value="ready">Ready to attach</option>
+              <option value="rate">Rate mismatch</option><option value="day">Day mismatch</option>
               <option value="missing_deal">Missing deal #</option>
             </select>
             <button class="btn btn-outline-primary btn-sm" t-on-click="onFilter" t-att-disabled="state.querying">Apply</button>
