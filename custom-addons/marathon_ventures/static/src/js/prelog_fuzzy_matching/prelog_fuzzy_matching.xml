@@ -50,6 +50,12 @@
                       t-att-disabled="state.exporting or state.querying or state.mutating or !state.hasFiltered">
                 <i class="fa fa-download me-1"/><t t-esc="state.exporting ? 'Exporting…' : 'Export View'"/>
               </button>
+              <!-- <button class="btn btn-outline-warning"
+                      title="Per-schedule breakdown: prelogs attached vs units available, with each schedule's rate / rotation / days so you can see why they matched"
+                      t-on-click="onExportOverrunDiagnostics"
+                      t-att-disabled="state.exporting or state.querying or state.mutating or !state.hasFiltered">
+                <i class="fa fa-stethoscope me-1"/>Overrun Diagnostics
+              </button> -->
             </div>
           </div>
         </section>
@@ -171,7 +177,7 @@
                     <span class="mv-fuzzy__quality mv-fuzzy__quality--exact" t-if="row.status === 'suggestion' and row.match_quality === 'exact'">Exact</span>
                     <span class="mv-fuzzy__quality mv-fuzzy__quality--fuzzy" t-if="row.status === 'suggestion' and row.match_quality === 'fuzzy'">Fuzzy</span>
                   </td>
-                  <td><span class="mv-fuzzy__reason" t-att-title="row.reason" t-esc="row.reason or (row.status === 'matched' ? 'Schedule attached' : 'Ready to attach')"/></td>
+                  <td><span class="mv-fuzzy__reason" t-att-title="row.reason" t-esc="row.reason or reasonFallback(row)"/></td>
                   <td><button class="btn btn-outline-secondary btn-sm" t-on-click="() => this.openDrawer(row)"><i class="fa fa-eye"/> Review</button></td>
                 </tr>
               </tbody>

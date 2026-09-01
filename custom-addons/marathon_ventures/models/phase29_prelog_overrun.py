@@ -53,6 +53,25 @@ class MvPrelogDataOverrun(models.Model):
     _name = 'mv.prelog_data'
     _inherit = 'mv.prelog_data'
 
+    # ------------------------------------------------------------------
+    # Indexes for the Prelog Workbench.
+    #
+    # Every workbench query filters on some combination of
+    # version / import_program / import_week_value / removed / schedule,
+    # and the overrun map groups by `schedule`. Only import_program,
+    # import_week_value, network_deal_number and import_job carried an
+    # index; the rest forced sequential scans, which is what made large
+    # views slow. A composite index for the common three-way filter is
+    # added in migrations/19.0.1.2.5/post-migration.py.
+    # ------------------------------------------------------------------
+    version = fields.Integer(string='Version', index=True)
+    schedule = fields.Many2one(
+        string='Schedule',
+        comodel_name='mv.schedules',
+        ondelete='cascade',
+        index=True,
+    )
+
     is_overrun = fields.Boolean(
         string='Is Overrun',
         default=False,

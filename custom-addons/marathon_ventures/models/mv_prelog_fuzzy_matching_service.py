@@ -114,24 +114,28 @@ class MvPrelogDataFuzzyMatching(models.Model):
             import_job_id=import_job_id,
         )
         prelogs = self.search(domain, order='airdate asc, scheduletime asc, id asc')
+        # Only the issue filters (time / length / ambiguous) depend on
+        # analysis-derived flags for ALREADY-ATTACHED rows. When none is
+        # active we skip that analysis for attached rows entirely and
+        # backfill it for just the visible page further down.
+        needs_attached_analysis = issue_filter in ('time', 'length', 'ambiguous')
         all_rows = self._fuzzy_build_rows(
             prelogs,
             program,
             selected_week,
             use_attached=True,
+            analyze_attached=needs_attached_analysis,
         )
         for row, prelog in zip(all_rows, prelogs):
             self._fuzzy_classify_row(row, prelog)
 
-        # PREDICTED OVERRUN pass: rows that are currently just
-        # "suggestion" (not yet attached) still contribute to the
-        # schedule's projected load. If more suggestions target a
-        # schedule than it has remaining capacity, flag the excess as
-        # 'overrun' up-front so the workbench shows the situation
-        # before anyone clicks Attach. Ordering is airdate/id ASC so
-        # the earliest-planned spots keep the seats and the last
-        # suggestions become the overrun.
-        self._fuzzy_flag_suggested_overruns(all_rows, prelogs, selected_version)
+        # OVERRUN pass. One batched query resolves live attached-counts
+        # vs units_available for every schedule in the result set, then
+        # stamps the '+N' badge and promotes over-capacity rows to
+        # status 'overrun'. Covers BOTH already-attached rows (real
+        # overrun) and pending suggestions (projected overrun), and is
+        # scoped to the version currently in view.
+        self._fuzzy_apply_overrun_badges(all_rows, selected_version)
 
         counts = {
             'all': sum(row['status'] != 'removed' for row in all_rows),
@@ -159,14 +163,209 @@ class MvPrelogDataFuzzyMatching(models.Model):
             offset = min(offset, ((total - 1) // limit) * limit)
         else:
             offset = 0
+        visible = rows[offset:offset + limit]
+        # Backfill the analysis-derived fields for the page the user is
+        # actually about to see. Everything outside this window stays
+        # un-analysed, which is what keeps a 100k-row view fast.
+        if not needs_attached_analysis:
+            self._fuzzy_enrich_visible_rows(
+                visible, program, selected_week,
+            )
         return {
-            'rows': rows[offset:offset + limit],
+            'rows': visible,
             'total': total,
             'offset': offset,
             'limit': limit,
             'page': (offset // limit) + 1 if total else 0,
             'pages': ((total + limit - 1) // limit) if total else 0,
             'counts': counts,
+        }
+
+    @api.model
+    def _fuzzy_enrich_visible_rows(self, rows, program, selected_week):
+        """Fill in analysis-derived fields for a page of attached rows.
+
+        _fuzzy_build_rows(analyze_attached=False) leaves `explanation`
+        and the *_mismatch flags at their defaults for rows that are
+        already attached. That is fine for counting / filtering /
+        sorting, but the drawer and the row chips want the real values,
+        so we compute them here - for at most `limit` rows instead of
+        the whole result set.
+        """
+        if not rows:
+            return
+        target_ids = [
+            row['id'] for row in rows
+            if row.get('attached') and row['attached'].get('id')
+        ]
+        if not target_ids:
+            return
+        prelogs = self.browse(target_ids).exists()
+        rebuilt = self._fuzzy_build_rows(
+            prelogs,
+            program,
+            selected_week,
+            use_attached=True,
+            analyze_attached=True,
+        )
+        by_id = {r['id']: r for r in rebuilt}
+        carry = (
+            'explanation', 'match_quality', 'match_quality_label',
+            'time_mismatch', 'length_mismatch', 'rate_mismatch',
+            'deal_mismatch', 'network_mismatch', 'day_mismatch',
+            'ambiguous_count', 'suggestion_attachable',
+        )
+        for row in rows:
+            full = by_id.get(row['id'])
+            if not full:
+                continue
+            for key in carry:
+                if key in full:
+                    row[key] = full[key]
+
+    @api.model
+    def fuzzy_overrun_diagnostics(
+        self,
+        program_id=False,
+        week_start=False,
+        version=False,
+        import_job_id=False,
+        limit=500,
+    ):
+        """Per-schedule overrun breakdown for the current filters.
+
+        Answers "why is everything flagged Overrun?" by showing, for
+        every schedule in the current view, how many prelogs attached
+        to it, its units_available, and the resulting overrun - plus
+        the schedule's own matching attributes (rate / days / rotation)
+        so an over-loose match is visible at a glance.
+
+        Returns {'rows': [...], 'totals': {...}} sorted worst-first.
+        """
+        self._fuzzy_check_access()
+        program, selected_week, selected_version = (
+            self._fuzzy_validate_optional_filters(
+                program_id, week_start, version,
+            )
+        )
+        domain = self._fuzzy_prelog_domain(
+            program.id if program else False,
+            selected_week,
+            selected_version,
+            unmatched_only=False,
+            include_removed=False,
+            import_job_id=import_job_id,
+        ) + [('schedule', '!=', False)]
+
+        # Grouped count per schedule in one query.
+        self.env.cr.execute(
+            """
+            SELECT p.schedule, COUNT(*)
+              FROM mv_prelog_data p
+             WHERE p.id IN %s
+             GROUP BY p.schedule
+             ORDER BY COUNT(*) DESC
+            """,
+            (tuple(self.search(domain).ids) or (0,),),
+        )
+        grouped = self.env.cr.fetchall()
+        if not grouped:
+            return {'rows': [], 'totals': {}}
+
+        sched_ids = [row[0] for row in grouped][: max(int(limit or 500), 1)]
+        counts = dict(grouped)
+        schedules = self.env['mv.schedules'].browse(sched_ids).exists()
+
+        rows = []
+        total_over = 0
+        for sched in schedules:
+            attached = int(counts.get(sched.id, 0))
+            cap = int(sched.units_available or 0)
+            overrun = max(0, attached - cap)
+            total_over += overrun
+            days = ', '.join(
+                sorted(
+                    [d.name for d in sched.days_allowed if d.name],
+                    key=lambda v: self._FUZZY_DAY_ORDER.get(
+                        v[:3].strip().lower(), 99,
+                    ),
+                )
+            )
+            rows.append({
+                'schedule_id': sched.id,
+                'schedule': sched.display_name or '',
+                'deal_number': (
+                    sched.deal_parent.network_deal_number
+                    if sched.deal_parent else ''
+                ) or '',
+                'week': (
+                    fields.Date.to_string(sched.week) if sched.week else ''
+                ),
+                'status': sched.status or '',
+                'rate': float(sched.rate or 0.0),
+                'length': self._fuzzy_schedule_length(sched) or '',
+                'rotation': '%s-%s' % (
+                    self._fuzzy_selection_label(sched, 'start_time') or '',
+                    self._fuzzy_selection_label(sched, 'end_time') or '',
+                ),
+                'days_allowed': days,
+                'units_available': cap,
+                'prelogs_attached': attached,
+                'overrun': overrun,
+            })
+        rows.sort(key=lambda r: (-r['overrun'], -r['prelogs_attached']))
+        return {
+            'rows': rows,
+            'totals': {
+                'schedules': len(rows),
+                'schedules_over': sum(1 for r in rows if r['overrun'] > 0),
+                'prelogs_attached': sum(r['prelogs_attached'] for r in rows),
+                'units_available': sum(r['units_available'] for r in rows),
+                'overrun': total_over,
+                'version': selected_version or '',
+            },
+        }
+
+    @api.model
+    def fuzzy_overrun_diagnostics_csv(
+        self,
+        program_id=False,
+        week_start=False,
+        version=False,
+        import_job_id=False,
+    ):
+        """CSV of fuzzy_overrun_diagnostics for offline review."""
+        data = self.fuzzy_overrun_diagnostics(
+            program_id, week_start, version, import_job_id, limit=100000,
+        )
+        headers = [
+            'Schedule', 'Deal #', 'Week', 'Sched Status', 'Rate', 'Length',
+            'Rotation', 'Days Allowed', 'Units Available',
+            'Prelogs Attached', 'Overrun',
+        ]
+        buf = io.StringIO()
+        writer = csv.writer(buf)
+        writer.writerow(headers)
+        for row in data['rows']:
+            writer.writerow(self._fuzzy_csv_row([
+                row['schedule'], row['deal_number'], row['week'],
+                row['status'], row['rate'], row['length'], row['rotation'],
+                row['days_allowed'], row['units_available'],
+                row['prelogs_attached'], row['overrun'],
+            ]))
+        totals = data.get('totals') or {}
+        writer.writerow([])
+        writer.writerow(['TOTALS'])
+        for key in (
+            'schedules', 'schedules_over', 'prelogs_attached',
+            'units_available', 'overrun', 'version',
+        ):
+            writer.writerow([key, totals.get(key, '')])
+        return {
+            'filename': 'PrelogOverrunDiagnostics-v%s.csv' % (
+                totals.get('version') or 'all',
+            ),
+            'content': buf.getvalue(),
         }
 
     @api.model
@@ -997,7 +1196,133 @@ class MvPrelogDataFuzzyMatching(models.Model):
         return domain
 
     @api.model
-    def _fuzzy_flag_suggested_overruns(self, all_rows, prelogs, selected_version=False):
+    def _fuzzy_overrun_map(self, schedule_ids, selected_version=False):
+        """Live overrun figures for a batch of schedules.
+
+        Returns {schedule_id: {'attached': n, 'cap': c, 'overrun': o}}
+        where overrun = max(0, attached - cap).
+
+        Why this exists
+        ---------------
+        * CORRECTNESS: the stored `mv.schedules.overrun_amount` is only
+          refreshed when a mutation happens to pass through one of our
+          hooks, and it is always scoped to the LATEST prelog version.
+          The workbench may be viewing an older version, so reading the
+          stored field shows a stale / wrong-version number. This
+          computes the figure for the version actually in view.
+        * PERFORMANCE: the previous code issued one search_count per
+          schedule inside a loop. This is a single grouped query for
+          the whole batch.
+        """
+        ids = [int(i) for i in (schedule_ids or []) if i]
+        if not ids:
+            return {}
+        schedules = self.env['mv.schedules'].browse(ids).exists()
+        caps = {
+            sched.id: int(sched.units_available or 0)
+            for sched in schedules
+        }
+        if not caps:
+            return {}
+
+        # One grouped count. Raw SQL keeps this a single round trip and
+        # sidesteps read_group API drift across Odoo versions.
+        params = [tuple(caps.keys())]
+        version_clause = ''
+        if selected_version:
+            version_clause = 'AND version = %s'
+            params.append(int(selected_version))
+        self.env.cr.execute(
+            """
+            SELECT schedule, COUNT(*)
+              FROM mv_prelog_data
+             WHERE schedule IN %%s
+               AND COALESCE(removed, FALSE) = FALSE
+               %s
+             GROUP BY schedule
+            """ % version_clause,
+            params,
+        )
+        counts = {row[0]: int(row[1]) for row in self.env.cr.fetchall()}
+
+        result = {}
+        for sched_id, cap in caps.items():
+            attached = counts.get(sched_id, 0)
+            result[sched_id] = {
+                'attached': attached,
+                'cap': cap,
+                'overrun': max(0, attached - cap),
+            }
+        return result
+
+    @api.model
+    def _fuzzy_apply_overrun_badges(self, all_rows, selected_version=False):
+        """Stamp live overrun figures onto every row's schedule chip and
+        promote over-capacity rows to status 'overrun'.
+
+        Runs once per request over the whole row set. Replaces reading
+        the stale stored `overrun_amount` and the per-schedule
+        search_count loop.
+        """
+        if not all_rows:
+            return
+
+        # Collect every schedule referenced by the result set.
+        sched_ids = set()
+        for row in all_rows:
+            for key in ('attached', 'suggested'):
+                chip = row.get(key)
+                if chip and chip.get('id'):
+                    sched_ids.add(chip['id'])
+        if not sched_ids:
+            return
+
+        overrun_map = self._fuzzy_overrun_map(sched_ids, selected_version)
+
+        # --- attached rows: badge + status straight from the live map.
+        for row in all_rows:
+            if row.get('status') == 'removed':
+                continue
+            chip = row.get('attached')
+
+            if not chip or not chip.get('id'):
+                continue
+            info = overrun_map.get(chip['id'])
+            if not info:
+                continue
+            chip = dict(chip)
+            chip['overrun_amount'] = info['overrun']
+            chip['units_available'] = info['cap']
+            chip['attached_count'] = info['attached']
+            row['attached'] = chip
+            if info['overrun'] > 0:
+                row['status'] = 'overrun'
+                row['status_label'] = _('Overrun')
+                row['is_overrun'] = True
+                row['reason'] = _(
+                    'Schedule %(name)s has %(cap)s unit(s) but '
+                    '%(n)s prelog(s) are attached - over by %(o)s.'
+                ) % {
+                    'name': chip.get('name') or '',
+                    'cap': info['cap'],
+                    'n': info['attached'],
+                    'o': info['overrun'],
+                }
+            else:
+                # Back within capacity - make sure a previously stored
+                # is_overrun flag doesn't keep the row mislabelled.
+                if row.get('status') == 'overrun':
+                    row['status'] = 'matched'
+                    row['status_label'] = _('Matched')
+                row['is_overrun'] = False
+
+        # --- suggestion rows: projected overrun if all were attached.
+        self._fuzzy_flag_suggested_overruns(
+            all_rows, overrun_map, selected_version,
+        )
+
+    @api.model
+    def _fuzzy_flag_suggested_overruns(self, all_rows, overrun_map, selected_version=False):
         """Mark suggested rows as 'overrun' when the target schedule
         would exceed capacity if every suggestion attached.
 
@@ -1018,17 +1343,16 @@ class MvPrelogDataFuzzyMatching(models.Model):
         Version scoping: prelog files are uploaded daily and each new
         version re-includes prior days' spots, so overrun is judged
         against a single version. `selected_version` is the version the
-        workbench is currently filtered to; when set we count attached
-        prelogs only at that version.
-        """
-        Schedule = self.env['mv.schedules']
-        rows_by_prelog_id = {row['id']: row for row in all_rows}
+        workbench is currently filtered to; when set the attached counts
+        in `overrun_map` were already computed at that version.
 
-        # Bucket suggested rows by schedule id (preserving prelog order).
+        `overrun_map` comes from _fuzzy_overrun_map - one grouped query
+        for the whole batch, rather than a search_count per schedule.
+        """
+        # Bucket suggested rows by schedule id, preserving row order.
         suggested_bucket = {}
-        for prelog in prelogs:
-            row = rows_by_prelog_id.get(prelog.id)
-            if not row or row['status'] != 'suggestion':
+        for row in all_rows:
+            if row.get('status') != 'suggestion':
                 continue
             sug = row.get('suggested')
             if not sug or not sug.get('id'):
@@ -1038,23 +1362,13 @@ class MvPrelogDataFuzzyMatching(models.Model):
         if not suggested_bucket:
             return
 
-        # Load schedules in one shot for units_available / attached count.
-        schedules = Schedule.browse(list(suggested_bucket.keys())).exists()
-        for schedule in schedules:
-            cap = int(schedule.units_available or 0)
-            # Count prelogs already attached to this schedule, scoped to
-            # the version in view so carried-over spots aren't double
-            # counted against capacity.
-            attached_domain = [
-                ('schedule', '=', schedule.id),
-                ('removed', '=', False),
-            ]
-            resolved_version = selected_version or self._mv_latest_prelog_version(schedule)
-            if resolved_version:
-                attached_domain.append(('version', '=', resolved_version))
-            already_attached = self.env['mv.prelog_data'].search_count(attached_domain)
+        for sched_id, bucket in suggested_bucket.items():
+            info = overrun_map.get(sched_id)
+            if not info:
+                continue
+            cap = info['cap']
+            already_attached = info['attached']
             available = cap - already_attached
-            bucket = suggested_bucket[schedule.id]
             excess = len(bucket) - max(available, 0)
             if excess <= 0:
                 continue
@@ -1062,12 +1376,13 @@ class MvPrelogDataFuzzyMatching(models.Model):
             # targeting it as Overrun so the whole group surfaces
             # together and the planner reviews them as one batch,
             # rather than singling out only the "last N" excess rows.
+            sched_name = (bucket[0].get('suggested') or {}).get('name') or ''
             reason_text = _(
                 'Schedule %(name)s has %(cap)s unit(s); '
                 '%(pending)s prelog(s) target it - would overrun by '
                 '%(excess)s.'
             ) % {
-                'name': schedule.display_name or '',
+                'name': sched_name,
                 'cap': cap,
                 'pending': len(bucket) + already_attached,
                 'excess': excess,
@@ -1081,6 +1396,8 @@ class MvPrelogDataFuzzyMatching(models.Model):
                     int(sug.get('overrun_amount') or 0),
                     excess,
                 )
+                sug['units_available'] = cap
+                sug['attached_count'] = already_attached
                 row['suggested'] = sug
                 row['reason'] = reason_text
 
@@ -1372,10 +1689,9 @@ class MvPrelogDataFuzzyMatching(models.Model):
         selected_rows = [
             row for row in filtered_rows if row['id'] in selected_set
         ]
-        records_by_id = {prelog.id: prelog for prelog in prelogs}
-        selected_prelogs = self.browse()
-        for row_id in selected_ids:
-            selected_prelogs |= records_by_id[row_id]
+        # browse() once - the previous `recordset |= record` loop was
+        # O(n^2) and could dominate a large bulk selection.
+        selected_prelogs = self.browse(selected_ids)
         return selected_prelogs, selected_rows
 
     @api.model
@@ -1385,33 +1701,51 @@ class MvPrelogDataFuzzyMatching(models.Model):
         program,
         selected_week,
         use_attached=False,
+        analyze_attached=True,
     ):
+        """Build a row dict per prelog.
+
+        `analyze_attached=False` skips the per-schedule fuzzy analysis
+        for rows that ALREADY have a schedule attached. Those rows get
+        their status from plain DB columns, so the analysis only feeds
+        cosmetic fields (explanation, mismatch flags) which the caller
+        can fill in later for just the visible page. This is the main
+        lever that makes a 100k-row view load: the expensive
+        _fuzzy_analyze_schedule work is skipped for the bulk of rows.
+        """
+        # Group prelogs by (program, week) so candidate schedules are
+        # fetched once per group. Plain lists - the previous version
+        # used `recordset |= prelog` inside the loop, which is O(n^2)
+        # and dominates runtime on large result sets.
         groups = {}
         contexts = {}
+        row_keys = []
         for prelog in prelogs:
             row_program = prelog.import_program or program
             row_week = prelog.import_week_value or selected_week
             key = (row_program.id if row_program else False, row_week)
-            groups.setdefault(key, self.browse())
-            groups[key] |= prelog
+            groups.setdefault(key, []).append(prelog.id)
             contexts[key] = (row_program, row_week)
+            row_keys.append(key)
 
         candidate_maps = {}
         accepted_networks = {}
-        for key, grouped_prelogs in groups.items():
+        for key, grouped_ids in groups.items():
             row_program, row_week = contexts[key]
             candidate_maps[key] = self._fuzzy_candidate_map(
-                grouped_prelogs,
+                self.browse(grouped_ids),
                 row_program,
                 row_week,
             )
             accepted_networks[key] = self._fuzzy_network_names(row_program)
 
         result = []
-        for prelog in prelogs:
-            row_program = prelog.import_program or program
-            row_week = prelog.import_week_value or selected_week
-            key = (row_program.id if row_program else False, row_week)
+        for prelog, key in zip(prelogs, row_keys):
+            row_program = contexts[key][0]
+            attached = prelog.schedule if use_attached else False
+            # Skip candidate analysis when the row is already attached
+            # and the caller does not need the derived fields yet.
+            skip_analysis = bool(attached) and not analyze_attached
             result.append(self._fuzzy_build_row(
                 prelog,
                 row_program,
@@ -1420,7 +1754,8 @@ class MvPrelogDataFuzzyMatching(models.Model):
                     [],
                 ),
                 accepted_networks[key],
-                prelog.schedule if use_attached else False,
+                attached,
+                analyze=not skip_analysis,
             ))
         return result
 
@@ -1456,6 +1791,7 @@ class MvPrelogDataFuzzyMatching(models.Model):
         schedules,
         accepted_networks=None,
         attached_schedule=False,
+        analyze=True,
     ):
         day = prelog.airdate.strftime('%a') if prelog.airdate else ''
         reason = ''
@@ -1463,7 +1799,14 @@ class MvPrelogDataFuzzyMatching(models.Model):
         suggested_analysis = False
         ambiguous_count = 0
 
-        if attached_schedule:
+        if attached_schedule and not analyze:
+            # Fast path for already-attached rows: status comes from DB
+            # columns, so the fuzzy analysis is not needed here. The
+            # derived fields (explanation / mismatch flags) are filled
+            # in later for just the visible page by
+            # _fuzzy_enrich_visible_rows.
+            suggested = attached_schedule
+        elif attached_schedule:
             suggested_analysis = self._fuzzy_analyze_schedule(
                 prelog,
                 program,
@@ -1822,8 +2165,14 @@ class MvPrelogDataFuzzyMatching(models.Model):
                 self._fuzzy_selection_label(schedule, 'status')
                 or ''
             ),
-            'overrun_amount': int(schedule.overrun_amount or 0),
+            # Overrun figures are stamped later by
+            # _fuzzy_apply_overrun_badges, which computes them live for
+            # the version in view. The stored overrun_amount is NOT
+            # read here: it is only refreshed on mutation and is always
+            # scoped to the latest version, so it goes stale.
+            'overrun_amount': 0,
             'units_available': int(schedule.units_available or 0),
+            'attached_count': 0,
         }
 
     # ------------------------------------------------------------------

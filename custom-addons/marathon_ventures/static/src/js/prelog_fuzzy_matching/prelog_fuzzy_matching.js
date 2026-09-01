@@ -411,6 +411,39 @@ export class MvPrelogFuzzyMatching extends Component {
         this.state.manualSchedule = "";
         this.state.drawerOverrun = null;
     }
+    async onExportOverrunDiagnostics() {
+        if (!this._filtersAreValid()) return;
+        const f = this.state.filters;
+        this.state.exporting = true;
+        try {
+            const result = await this.orm.call(
+                "mv.prelog_data", "fuzzy_overrun_diagnostics_csv",
+                [
+                    f.programId || false, f.weekStart || false,
+                    f.version || false, f.importJobId || false,
+                ],
+            );
+            const blob = new Blob(
+                ["﻿", result.content || ""],
+                { type: "text/csv;charset=utf-8" },
+            );
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = result.filename || "PrelogOverrunDiagnostics.csv";
+            link.click();
+            window.URL.revokeObjectURL(url);
+        } catch (e) {
+            this.notification.add(
+                (e && e.data && e.data.message)
+                || (e && e.message) || String(e),
+                { type: "danger" },
+            );
+        } finally {
+            this.state.exporting = false;
+        }
+    }
+
     async onExport() {
         if (!this._filtersAreValid()) return;
         const f = this.state.filters;
@@ -473,6 +506,15 @@ export class MvPrelogFuzzyMatching extends Component {
         }) : "";
     }
     statusBadge(row) { return `mv-fuzzy__status mv-fuzzy__status--${row.status}`; }
+    reasonFallback(row) {
+        // An attached row must never read "Ready to attach" - it is
+        // already attached. Overrun rows normally carry an explicit
+        // reason from the server; this is the safety net.
+        if (row.status === "matched") return "Schedule attached";
+        if (row.status === "overrun") return "Over schedule capacity";
+        if (row.status === "removed") return "Removed";
+        return "Ready to attach";
+    }
     tabTitle() {
         return {
             all: "All",
