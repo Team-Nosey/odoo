@@ -963,6 +963,76 @@ class TestPostlogMatching(TransactionCase):
         self.assertEqual(vals['import_match_status'], 'matched')
         self.assertEqual(vals['schedule'], self.schedule.id)
 
+    def test_alternatives_rank_by_how_many_checks_they_fail(self):
+        """One mismatch outranks two, whatever the mismatch happens to be.
+
+        Reported off the 8/17 drawer: a candidate differing only on day sat
+        BELOW one differing on time AND rate, because day was the first sort
+        term. An operator reads the list as "how close is this?", so the count
+        of failed checks leads and the severity terms only break ties.
+        """
+        day_only = self.env['mv.schedules'].create({     # right hours, wrong day
+            'deal_parent': self.deal.id, 'week': self.week,
+            'start_time': 'v_09_00a', 'end_time': 'v_10_00a',
+            'days_allowed': [Command.set(self.tuesday.ids)],
+            'rate': 100.0, 'status': 'sold',
+        })
+        time_and_rate = self.env['mv.schedules'].create({   # right day, wrong both
+            'deal_parent': self.deal.id, 'week': self.week,
+            'start_time': 'v_02_00a', 'end_time': 'v_03_00a',
+            'days_allowed': [Command.set(self.monday.ids)],
+            'rate': 555.0, 'status': 'sold',
+        })
+        self._create_postlog()                             # Mon 09:30, $100
+
+        row = self._search()['rows'][0]
+
+        # self.schedule matches on every check, so it stays the suggestion.
+        self.assertEqual(row['suggested']['id'], self.schedule.id)
+
+        alt_ids = [a['id'] for a in row['alternatives']]
+        self.assertIn(day_only.id, alt_ids)
+        self.assertIn(time_and_rate.id, alt_ids)
+        self.assertLess(
+            alt_ids.index(day_only.id), alt_ids.index(time_and_rate.id),
+            "a day-only mismatch must rank above a time+rate mismatch",
+        )
+
+    def test_alternatives_drop_candidates_with_three_or_more_differences(self):
+        """A runner-up has to be a near miss; 3+ failed checks is just noise.
+
+        A schedule that differs on day AND time AND rate is not a plausible
+        alternative - it is a different schedule that happens to share the deal
+        number. The suggestion itself is never dropped by the cap, or a row would
+        silently become no_suggestion.
+        """
+        near = self.env['mv.schedules'].create({        # 1 difference: day
+            'deal_parent': self.deal.id, 'week': self.week,
+            'start_time': 'v_09_00a', 'end_time': 'v_10_00a',
+            'days_allowed': [Command.set(self.tuesday.ids)],
+            'rate': 100.0, 'status': 'sold',
+        })
+        far = self.env['mv.schedules'].create({         # 3: day, time, rate
+            'deal_parent': self.deal.id, 'week': self.week,
+            'start_time': 'v_02_00a', 'end_time': 'v_03_00a',
+            'days_allowed': [Command.set(self.tuesday.ids)],
+            'rate': 555.0, 'status': 'sold',
+        })
+        self._create_postlog()                          # Mon 09:30, $100, :30
+
+        row = self._search()['rows'][0]
+
+        self.assertEqual(row['suggested']['id'], self.schedule.id)
+        alt_ids = [a['id'] for a in row['alternatives']]
+        self.assertIn(near.id, alt_ids, "a one-difference near miss must be offered")
+        self.assertNotIn(far.id, alt_ids, "a three-difference candidate must be dropped")
+
+
+
+
+
+
+
 
 
 

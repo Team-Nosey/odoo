@@ -47,6 +47,14 @@ class MvPostlogMatching(models.Model):
     _FUZZY_PAGE_SIZE = 200
     _FUZZY_TIME_BUFFER_MINUTES = 120
     _FUZZY_MAX_ALTERNATIVES = 4
+    # A runner-up worth offering has to be a near miss. Three or more failed
+    # checks is not a plausible alternative, it is a different schedule that
+    # happens to share the deal number, and listing it only adds noise to the
+    # drawer. Counted the same way _fuzzy_mismatch_count ranks candidates, so
+    # the cap matches the "N differences" the drawer prints. The suggestion
+    # itself is never dropped by this - a row must keep its best candidate even
+    # when that candidate is poor, or it would silently become no_suggestion.
+    _FUZZY_MAX_ALTERNATIVE_DIFFERENCES = 2
     _FUZZY_DAY_ORDER = {
         'mon': 0,
         'tue': 1,
@@ -1157,6 +1165,8 @@ class MvPostlogMatching(models.Model):
                 alternatives = [
                     self._fuzzy_alternative_payload(analysis)
                     for analysis in eligible[1:self._FUZZY_MAX_ALTERNATIVES + 1]
+                    if self._fuzzy_mismatch_count(analysis)
+                    <= self._FUZZY_MAX_ALTERNATIVE_DIFFERENCES
                 ]
             else:
                 reason = self._fuzzy_no_suggestion_reason(analyses)
@@ -1168,6 +1178,10 @@ class MvPostlogMatching(models.Model):
         network_mismatch = False
         day_mismatch = False
         suggestion_attachable = False
+        # How far outside the rotation the spot aired, for the drawer's
+        # Rotation column. None when there is no suggestion to measure against.
+        time_distance = None
+        exact_time_match = False
 
         if suggested_analysis:
             time_mismatch = not suggested_analysis['time_match']
@@ -1177,6 +1191,8 @@ class MvPostlogMatching(models.Model):
             network_mismatch = not suggested_analysis['network_match']
             day_mismatch = not suggested_analysis['day_match']
             suggestion_attachable = suggested.status == 'sold'
+            time_distance = suggested_analysis['time_distance']
+            exact_time_match = suggested_analysis['exact_time_match']
 
             if not suggested_analysis['network_match']:
                 reason = _('Network mismatch')
@@ -1279,6 +1295,8 @@ class MvPostlogMatching(models.Model):
             'deal_mismatch': deal_mismatch,
             'network_mismatch': network_mismatch,
             'day_mismatch': day_mismatch,
+            'time_distance': time_distance,
+            'exact_time_match': exact_time_match,
         }
 
     @api.model
@@ -1383,10 +1401,36 @@ class MvPostlogMatching(models.Model):
         return _('No time match')
 
     @api.model
+    @staticmethod
+    def _fuzzy_mismatch_count(analysis):
+        """How many of the four checks this candidate fails.
+
+        Time is counted with ``exact_time_match`` (did the spot air inside the
+        rotation) and NOT with the buffer-tolerant ``time_match``. Using the
+        buffered flag here would score the 9:22pm case wrong: an 8p-9p rotation
+        the spot missed by 22 minutes but which carries the right rate would
+        count zero mismatches and outrank the 9p-10p rotation the spot actually
+        aired in with a mis-keyed rate. Counting strictly leaves those tied at
+        one mismatch each, and the severity terms in the sort key then pick the
+        rotation the spot physically aired in.
+        """
+        return sum(
+            0 if analysis[key] else 1
+            for key in (
+                'day_match', 'exact_time_match', 'rate_match', 'length_match',
+            )
+        )
+
     def _fuzzy_analysis_sort_key(self, analysis):
         schedule = analysis['schedule']
         return (
             self._fuzzy_status_priority(schedule.status),
+            # Fewest failed checks first. This is what an operator reads off the
+            # list: a candidate that differs only on day is a closer call than
+            # one that differs on time AND rate. The severity terms below then
+            # break ties, so a one-mismatch pair still resolves by where the
+            # spot physically aired rather than by which attribute was typed in.
+            self._fuzzy_mismatch_count(analysis),
             # Where the postlog physically aired decides which schedule it belongs
             # to: day first, then how far it sat from the rotation. Rate and
             # length are attributes that can be mis-keyed, so they rank *after* -
@@ -1441,6 +1485,15 @@ class MvPostlogMatching(models.Model):
         payload.update({
             'why': ', '.join(problems) or _('matches on every check'),
             'attachable': analysis['schedule'].status == 'sold',
+            # Per-field flags so the table can highlight the cell that differs.
+            # Named to match the row payload's keys so the template reads the
+            # same way for the suggestion and for a runner-up.
+            'day_mismatch': not analysis['day_match'],
+            'time_mismatch': not analysis['time_match'],
+            'rate_mismatch': not analysis['rate_match'],
+            'length_mismatch': not analysis['length_match'],
+            'time_distance': analysis['time_distance'],
+            'exact_time_match': analysis['exact_time_match'],
             'exact': bool(
                 analysis['day_match']
                 and analysis['exact_time_match']

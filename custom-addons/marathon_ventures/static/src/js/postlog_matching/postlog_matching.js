@@ -395,6 +395,162 @@ export class MvPostlogMatching extends Component {
         return `fa fa-sort-${direction} mv-fuzzy__sort-icon is-active`;
     }
 
+    /** The ranked candidates for the drawer, suggestion first, normalized to one
+     *  shape so the table renders in a single loop. The suggestion's per-field
+     *  flags live on the row while a runner-up carries its own, which is the only
+     *  reason this mapping exists. */
+    candidates() {
+        const row = this.state.drawerRow;
+        if (!row || !row.suggested) {
+            return [];
+        }
+        const shape = (schedule, flags, extra) => ({
+            schedule,
+            day_mismatch: flags.day_mismatch,
+            time_mismatch: flags.time_mismatch,
+            rate_mismatch: flags.rate_mismatch,
+            length_mismatch: flags.length_mismatch,
+            time_distance: flags.time_distance,
+            exact_time_match: flags.exact_time_match,
+            ...extra,
+        });
+        return [
+            shape(row.suggested, row, {
+                suggested: true,
+                attachable: row.suggestion_attachable,
+                alt: null,
+            }),
+            ...(row.alternatives || []).map((alt) =>
+                shape(alt, alt, {
+                    suggested: false,
+                    attachable: alt.attachable,
+                    alt,
+                })
+            ),
+        ];
+    }
+
+    /** Candidate rate minus the spot's rate, signed. "" when they agree, so the
+     *  delta only ever appears on a row that actually differs. */
+    rateDelta(schedule) {
+        const spot = Number(this.state.drawerRow?.rate ?? 0);
+        const other = Number(schedule?.rate ?? 0);
+        const diff = other - spot;
+        if (!Number.isFinite(diff) || Math.abs(diff) < 0.005) {
+            return "";
+        }
+        return `${diff > 0 ? "+" : "-"}$${this.formatRate(Math.abs(diff))}`;
+    }
+
+    /** Every check this candidate fails, counted the same four ways the ranking
+     *  counts them, so the column explains the order instead of contradicting it.
+     *  A green tick therefore means "nothing differs", never "the time is fine".
+     *
+     *  Says "outside rotation" rather than early/late on purpose: rotations may
+     *  cross midnight, so a direction would sometimes be a lie. */
+    differenceSummary(candidate) {
+        const parts = [];
+        if (candidate.day_mismatch) {
+            // Name the day the spot aired: the operator's next question after
+            // "wrong day" was always "wrong how?".
+            const day = this.spotDayName();
+            parts.push(day ? `Day Not Allowed - ${day}` : "Day Not Allowed");
+        }
+        if (!candidate.exact_time_match) {
+            const distance = candidate.time_distance;
+            const airTime = this.formatAirTime(this.state.drawerRow?.air_time);
+            const howFar =
+                distance === null || distance === undefined || distance === false
+                    ? "outside rotation"
+                    : `${distance} min outside rotation`;
+            // Name the airtime that missed, the same way the day difference
+            // names the day that was not allowed.
+            parts.push(airTime ? `${howFar} - ${airTime}` : howFar);
+        }
+        if (candidate.rate_mismatch) {
+            const delta = this.rateDelta(candidate.schedule);
+            parts.push(delta ? `Rate ${delta}` : "Rate differs");
+        }
+        if (candidate.length_mismatch) {
+            parts.push(`Length ${candidate.schedule.length}`);
+        }
+        return {
+            count: parts.length,
+            label: parts.length
+                ? `${parts.length} difference${parts.length === 1 ? "" : "s"}`
+                : "Exact match",
+            // One per line. Joined on a middot they read as a single run-on
+            // sentence once there is more than one.
+            parts,
+        };
+    }
+
+    /** "2026-08-08" -> "08/08/2026 \u00b7 Saturday".
+     *  Built from the date parts rather than new Date(iso), which parses as UTC
+     *  midnight and lands on the previous day west of Greenwich. */
+    formatAirDate(value) {
+        const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value || ""));
+        if (!m) {
+            return value || "\u2014";
+        }
+        const [, y, mo, d] = m;
+        const dayName = this.weekdayName(value);
+        return `${mo}/${d}/${y}${dayName ? `\u00a0\u00b7\u00a0${dayName}` : ""}`;
+    }
+
+    /** Full weekday for an ISO date, e.g. "Saturday". Built from the date parts,
+     *  not new Date(iso), which parses as UTC midnight and lands on the previous
+     *  day west of Greenwich. "" when the value cannot be parsed. */
+    weekdayName(value) {
+        const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value || ""));
+        if (!m) {
+            return "";
+        }
+        const local = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+        return Number.isNaN(local.getTime())
+            ? ""
+            : local.toLocaleDateString(undefined, { weekday: "long" });
+    }
+
+    /** The weekday the spot aired. Falls back to the server's abbreviation
+     *  ("Sat") if the air date is missing or unparseable. */
+    spotDayName() {
+        const row = this.state.drawerRow;
+        return this.weekdayName(row?.air_date) || row?.day || "";
+    }
+
+    /** "05:10:15" -> "05:10:15 AM"; "17:10:15" -> "05:10:15 PM". */
+    formatAirTime(value) {
+        const m = /^(\d{1,2}):(\d{2})(?::(\d{2}))?/.exec(String(value || ""));
+        if (!m) {
+            return value || "\u2014";
+        }
+        const raw = Number(m[1]);
+        const suffix = raw < 12 ? "AM" : "PM";
+        const hour = raw % 12 || 12;
+        return `${String(hour).padStart(2, "0")}:${m[2]}:${m[3] || "00"} ${suffix}`;
+    }
+
+    /** "Mon, Tue, Wed, Thu, Fri, Sat, Sun" -> "Mon\u2013Sun" when contiguous.
+     *  Keeps the ranked table's Time & Days column narrow. Falls back to the
+     *  original string for gapped sets like Mon, Wed, Fri. */
+    condenseDays(value) {
+        const order = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+        const parts = String(value || "").split(",").map((d) => d.trim()).filter(Boolean);
+        if (parts.length < 3) {
+            return parts.join(", ") || "\u2014";
+        }
+        const idx = parts.map((d) => order.indexOf(d.slice(0, 3)));
+        if (idx.some((i) => i < 0)) {
+            return parts.join(", ");
+        }
+        const sorted = [...idx].sort((a, b) => a - b);
+        const contiguous = sorted.every((v, i) => i === 0 || v === sorted[i - 1] + 1);
+        return contiguous
+            ? `${order[sorted[0]]}\u2013${order[sorted[sorted.length - 1]]}`
+            : parts.join(", ");
+    }
+
     formatRate(value) {
         const number = Number(value || 0);
         return Number.isFinite(number) ? number.toLocaleString(undefined, {

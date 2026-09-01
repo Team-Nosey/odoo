@@ -80,5 +80,38 @@ registry.category("web_tour.tours").add("postlog_workbench_tour", {
             content: "the suggested schedule rendered",
             trigger: ".mv-fuzzy:contains('A-')",
         },
+        {
+            // Everything below this point is the review drawer. Without these
+            // steps the tour only proved the list renders, and the drawer - the
+            // ranked candidate table, the diff highlighting, the Attach buttons -
+            // had no coverage at all.
+            content: "open the review drawer",
+            trigger: ".mv-fuzzy__table .btn:contains('Review')",
+            run: "click",
+        },
+        {
+            content: "the drawer shows the ranked candidate list",
+            trigger: ".mv-fuzzy__drawer:contains('Possible schedules')",
+        },
+        {
+            content: "the Postlog Data card is the pinned subject of the comparison",
+            trigger: ".mv-postlog-sched__subject:contains('Postlog Data')",
+        },
+        {
+            content: "the suggestion is rank 1",
+            trigger: ".mv-postlog-sched__row--suggested .mv-postlog-sched__rank--first:contains('1')",
+        },
+        {
+            content: "the suggestion is labelled Suggested",
+            trigger: ".mv-postlog-sched__row--suggested:contains('Suggested')",
+        },
+        {
+            content: "the candidate carries an Attach action",
+            trigger: ".mv-postlog-sched__row--suggested .mv-postlog-sched__col-action .btn:contains('Attach')",
+        },
+        {
+            content: "the Rotation column rendered",
+            trigger: ".mv-postlog-sched__row--suggested .mv-postlog-sched__match",
+        },
     ],
 });

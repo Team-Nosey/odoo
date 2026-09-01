@@ -1,0 +1,226 @@
+// Postlog Workbench only.
+//
+// The Postlog Workbench shares .mv-fuzzy__* base styling with the Prelog
+// Workbench via prelog_fuzzy_matching.scss, which must stay untouched: prelog
+// is not ours to restyle. Anything postlog-specific belongs here instead, and
+// every selector below is a class the prelog template never emits.
+
+// "Suggested" pill, sitting beside the Exact/Fuzzy quality chip.
+.mv-fuzzy__quality--suggested {
+    color: #1c4c86;
+    background: #dbeafe;
+}
+
+// The review drawer is wider on postlog than on prelog: the ranked candidate
+// table needs the room. Scoped under .mv-postlog so the shared rule in
+// prelog_fuzzy_matching.scss - and the Prelog Workbench - is left alone.
+.mv-postlog .mv-fuzzy__drawer {
+    max-width: 900px;
+}
+
+// Two-column variant of the shared .mv-fuzzy__details grid, for the Postlog
+// Data card. Doubles the label/value pair per row so six fields fit in three
+// rows instead of six. Collapses back to one column when the drawer is narrow.
+.mv-postlog .mv-fuzzy__details--2col {
+    grid-template-columns: 104px minmax(0, 1fr) 104px minmax(0, 1fr);
+    column-gap: 1.1rem;
+
+    @media (max-width: 720px) {
+        grid-template-columns: 120px minmax(0, 1fr);
+    }
+}
+
+// The Postlog Data card is the one subject the candidates are compared against,
+// and its values are never repeated in the table. Pin it so those reference
+// values stay on screen while the operator scans down the candidate rows.
+.mv-postlog .mv-postlog-sched__subject {
+    position: sticky;
+    z-index: 2;
+    top: 0;
+}
+
+// The cell that differs from the spot. Only the differing cell is marked, so the
+// eye lands on the discrepancy without any "Differs on:" prose to read.
+.mv-postlog-sched__diff {
+    color: #8a4d00;
+    font-weight: 700;
+    text-decoration: underline;
+    text-decoration-color: #e7b168;
+    text-decoration-thickness: 2px;
+    text-underline-offset: 2px;
+}
+
+// Differences column: the count is the verdict, the detail explains it.
+.mv-postlog-sched__diff-count {
+    display: block;
+    font-weight: 700;
+}
+
+.mv-postlog-sched__diff-detail {
+    display: block;
+    margin-top: 0.1rem;
+    color: #6b7688;
+    font-weight: 500;
+}
+
+// Bulleted only when a candidate has more than one difference: a lone line
+// reads better flush. Hanging indent so a wrapped line aligns under its text
+// rather than under the bullet.
+.mv-postlog-sched__diff-detail--bulleted {
+    padding-left: 0.85rem;
+    text-indent: -0.85rem;
+
+    &::before {
+        content: "\2022";
+        margin-right: 0.4rem;
+        color: #a8b0bf;
+    }
+}
+
+// Signed rate difference, candidate minus spot.
+.mv-postlog-sched__delta {
+    margin-left: 0.35rem;
+    color: #8a4d00;
+    font-weight: 700;
+}
+
+// Ranked candidate table in the review drawer.
+.mv-postlog-sched {
+    overflow-x: auto;                     // never let the drawer scroll sideways
+    border: 1px solid var(--mv-fuzzy-border, #dfe4ec);
+    border-radius: 10px;
+    background: #fff;
+
+    &__table {
+        width: 100%;
+        min-width: 640px;
+        border-collapse: collapse;
+        font-size: 0.78rem;
+
+        th {
+            padding: 0.6rem 0.7rem;
+            border-bottom: 1px solid var(--mv-fuzzy-border, #dfe4ec);
+            color: #55617a;
+            font-size: 0.7rem;
+            font-weight: 700;
+            text-align: left;
+            white-space: nowrap;
+        }
+
+        td {
+            padding: 0.65rem 0.7rem;
+            border-bottom: 1px solid #eef1f6;
+            vertical-align: top;
+        }
+
+        tbody tr:last-child td {
+            border-bottom: 0;
+        }
+    }
+
+    &__row--suggested {
+        background: #f4f9ff;
+        box-shadow: inset 3px 0 0 0 #2f6fb5;
+    }
+
+    // Rank chip: 1 is filled blue, the runners-up are grey.
+    &__rank {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 1.25rem;
+        height: 1.25rem;
+        margin-right: 0.4rem;
+        border-radius: 50%;
+        background: #8b95a7;
+        color: #fff;
+        font-size: 0.66rem;
+        font-weight: 700;
+        vertical-align: middle;
+    }
+
+    &__rank--first {
+        background: #2f6fb5;
+    }
+
+    &__id {
+        margin-right: 0.35rem;
+        color: #1b64c4;
+        font-weight: 700;
+        text-decoration: none;
+
+        &:hover {
+            text-decoration: underline;
+        }
+    }
+
+    &__time {
+        font-weight: 700;
+        white-space: nowrap;
+    }
+
+    &__days {
+        margin-top: 0.1rem;
+        color: #6b7688;
+        white-space: nowrap;
+    }
+
+    &__facts {
+        color: #46526a;
+        white-space: nowrap;
+
+        i {
+            width: 0.9rem;
+            margin-right: 0.2rem;
+            color: #8b95a7;
+            text-align: center;
+        }
+    }
+
+    &__match {
+        display: inline-flex;
+        gap: 0.35rem;
+        align-items: flex-start;
+        font-weight: 650;
+        line-height: 1.35;
+
+        i {
+            margin-top: 0.1rem;
+        }
+    }
+
+    &__match--ok {
+        color: #0e6446;
+    }
+
+    &__match--warn {
+        color: #9a5700;
+    }
+
+    &__col-action {
+        width: 1%;
+        text-align: right;
+        white-space: nowrap;
+    }
+
+    &__btn {
+        font-size: 0.72rem;
+        font-weight: 650;
+    }
+
+    &__blocked {
+        color: #9a5700;
+        font-size: 0.7rem;
+        font-weight: 650;
+    }
+
+    &__footnote {
+        margin: 0.5rem 0 0;
+        color: #6b7688;
+        font-size: 0.7rem;
+
+        i {
+            margin-right: 0.25rem;
+        }
+    }
+}

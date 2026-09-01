@@ -160,9 +160,11 @@
             'marathon_ventures/static/src/scss/prelog_fuzzy_matching.scss',
             'marathon_ventures/static/src/js/prelog_fuzzy_matching/prelog_fuzzy_matching.js',
             'marathon_ventures/static/src/js/prelog_fuzzy_matching/prelog_fuzzy_matching.xml',
-            # Postlog Workbench. Deliberately reuses the prelog stylesheet
-            # (shared .mv-fuzzy__* class names) so the two pages cannot drift
-            # visually and there is only one place to restyle.
+            # Postlog Workbench. Reuses the prelog stylesheet for the shared
+            # .mv-fuzzy__* base styling, which is read-only for us - prelog is
+            # not ours to restyle. Postlog-only styling lives in
+            # postlog_matching.scss, loaded after it.
+            'marathon_ventures/static/src/scss/postlog_matching.scss',
             'marathon_ventures/static/src/js/postlog_matching/postlog_matching.js',
             'marathon_ventures/static/src/js/postlog_matching/postlog_matching.xml',
             'marathon_ventures/static/src/scss/report_builder.scss',

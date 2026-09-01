@@ -2,7 +2,10 @@
 <templates xml:space="preserve">
 
   <t t-name="marathon_ventures.MvPostlogMatching">
-    <div class="mv-fuzzy">
+    <!-- mv-postlog is a postlog-only hook: it lets postlog_matching.scss override
+         shared .mv-fuzzy__* rules (the drawer width) without editing prelog's
+         stylesheet or affecting the Prelog Workbench. -->
+    <div class="mv-fuzzy mv-postlog">
       <main class="mv-fuzzy__main" t-if="state.loaded">
         <h1 class="mv-fuzzy__page-title">Postlog Workbench</h1>
 
@@ -167,53 +170,101 @@
           <button class="btn btn-light btn-sm" t-on-click="closeDrawer"><i class="fa fa-times"/></button>
         </header>
         <div class="mv-fuzzy__drawer-body">
-          <section><h3>Postlog Data</h3><dl class="mv-fuzzy__details">
-            <dt>Network</dt><dd t-esc="state.drawerRow.network"/><dt>Air date</dt><dd><t t-esc="state.drawerRow.air_date"/> · <t t-esc="state.drawerRow.air_time"/></dd>
-            <dt>Deal #</dt><dd t-esc="state.drawerRow.deal_number"/><dt>Adv / Product</dt><dd t-esc="state.drawerRow.advertiser_product"/>
-            <dt>Agency</dt><dd t-esc="state.drawerRow.agency or '—'"/><dt>Length / Rate</dt><dd><t t-esc="state.drawerRow.length"/> · $<t t-esc="formatRate(state.drawerRow.rate)"/></dd>
+          <!-- Two columns, three fields each, to halve the height. The grid flows
+               row-major, so pairs are interleaved to land the spot's identity in the
+               left column and its commercial detail in the right. The 2col
+               modifier is postlog-only; prelog's drawer keeps one column. -->
+          <section class="mv-postlog-sched__subject"><h3>Postlog Data</h3><dl class="mv-fuzzy__details mv-fuzzy__details--2col">
+            <dt>Network</dt><dd t-esc="state.drawerRow.network"/>
+            <dt>Adv / Product</dt><dd t-esc="state.drawerRow.advertiser_product"/>
+            <dt>Air Date</dt><dd t-esc="formatAirDate(state.drawerRow.air_date)"/>
+            <dt>Agency</dt><dd t-esc="state.drawerRow.agency or '—'"/>
+            <dt>Air Time</dt><dd t-esc="formatAirTime(state.drawerRow.air_time)"/>
+            <dt>Length</dt><dd t-esc="state.drawerRow.length or '—'"/>
+            <dt>Deal #</dt><dd t-esc="state.drawerRow.deal_number"/>
+            <dt>Rate</dt><dd>$<t t-esc="formatRate(state.drawerRow.rate)"/></dd>
           </dl></section>
 
-          <section t-if="state.drawerRow.attached or state.drawerRow.suggested">
-            <h3><t t-esc="state.drawerRow.attached ? 'Attached Schedule' : 'Suggested Schedule'"/>
-              <span class="mv-fuzzy__quality mv-fuzzy__quality--exact" t-if="state.drawerRow.status === 'suggestion' and state.drawerRow.match_quality === 'exact'">Exact</span>
-              <span class="mv-fuzzy__quality mv-fuzzy__quality--fuzzy" t-if="state.drawerRow.status === 'suggestion' and state.drawerRow.match_quality === 'fuzzy'">Fuzzy</span>
-            </h3>
-            <t t-set="schedule" t-value="state.drawerRow.attached or state.drawerRow.suggested"/>
+          <section t-if="state.drawerRow.attached">
+            <h3>Attached Schedule</h3>
+            <t t-set="schedule" t-value="state.drawerRow.attached"/>
             <dl class="mv-fuzzy__details"><dt>Name</dt><dd><a class="mv-fuzzy__record-link" target="_blank" rel="noopener"
               t-att-href="scheduleOpenUrl(schedule)" t-on-click.stop="() => {}" t-esc="schedule.name"/></dd>
               <dt>Rotation</dt><dd t-esc="schedule.time_range or '—'"/><dt>Days</dt><dd t-esc="schedule.days_allowed or '—'"/>
               <dt>Length / Rate</dt><dd><t t-esc="schedule.length"/> · $<t t-esc="formatRate(schedule.rate)"/></dd><dt>Deal #</dt><dd t-esc="schedule.deal_number"/>
             </dl>
-            <p class="mv-fuzzy__explanation" t-if="state.drawerRow.explanation"><strong>Why this suggestion:</strong> <t t-esc="state.drawerRow.explanation"/></p>
           </section>
 
-          <section t-if="state.drawerRow.alternatives and state.drawerRow.alternatives.length">
-            <h3>Other possible schedules</h3>
-            <p class="mv-fuzzy__alt-hint">Ranked below the suggestion. Attaching one is recorded as a manual override.</p>
-            <ul class="mv-fuzzy__alts">
-              <t t-foreach="state.drawerRow.alternatives" t-as="alt" t-key="alt.id">
-                <li class="mv-fuzzy__alt">
-                  <div class="mv-fuzzy__alt-main">
-                    <strong t-esc="alt.name"/>
-                    <span class="mv-fuzzy__quality" t-att-class="alt.exact ? 'mv-fuzzy__quality--exact' : 'mv-fuzzy__quality--fuzzy'"
-                          t-esc="alt.exact ? 'Exact' : 'Fuzzy'"/>
-                    <div class="mv-fuzzy__alt-meta">
-                      <t t-esc="alt.time_range or '—'"/> · <t t-esc="alt.days_allowed or '—'"/>
-                      · <t t-esc="alt.length"/> · $<t t-esc="formatRate(alt.rate)"/>
-                    </div>
-                    <div class="mv-fuzzy__alt-why">Differs on: <t t-esc="alt.why"/></div>
-                  </div>
-                  <button class="btn btn-outline-primary btn-sm"
-                          t-att-disabled="state.mutating or !alt.attachable"
-                          t-on-click="() => this.attachAlternative(state.drawerRow, alt)">Use this</button>
-                </li>
-              </t>
-            </ul>
+          <!-- Ranked table. The first row IS the suggestion; rank number, badges,
+               and the failed-check summary all sit on one line per candidate so the
+               ordering reads at a glance. Markup is postlog-only, and the styling
+               lives in postlog_matching.scss so the prelog stylesheet is untouched. -->
+          <section t-if="!state.drawerRow.attached and state.drawerRow.suggested">
+            <h3>Possible schedules</h3>
+            <p class="mv-fuzzy__alt-hint">Ranked best first, fewest mismatches win.</p>
+
+            <div class="mv-postlog-sched">
+              <table class="mv-postlog-sched__table">
+                <thead>
+                  <tr>
+                    <th>ID &amp; Status</th>
+                    <th>Time &amp; Days</th>
+                    <th>Length / Rate / Deal Number</th>
+                    <th>Differences</th>
+                    <th class="mv-postlog-sched__col-action">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <t t-foreach="candidates()" t-as="c" t-key="c.schedule.id">
+                    <tr class="mv-postlog-sched__row" t-att-class="c.suggested ? 'mv-postlog-sched__row--suggested' : ''">
+                      <td>
+                        <span class="mv-postlog-sched__rank" t-att-class="c.suggested ? 'mv-postlog-sched__rank--first' : ''" t-esc="c_index + 1"/>
+                        <a class="mv-postlog-sched__id" target="_blank" rel="noopener"
+                           t-att-href="scheduleOpenUrl(c.schedule)" t-on-click.stop="() => {}" t-esc="c.schedule.name"/>
+                        <span class="mv-fuzzy__quality mv-fuzzy__quality--suggested" t-if="c.suggested">Suggested</span>
+                      </td>
+                      <td>
+                        <div class="mv-postlog-sched__time" t-att-class="c.time_mismatch ? 'mv-postlog-sched__diff' : ''"
+                             t-esc="c.schedule.time_range or '—'"/>
+                        <div class="mv-postlog-sched__days" t-att-class="c.day_mismatch ? 'mv-postlog-sched__diff' : ''"
+                             t-esc="condenseDays(c.schedule.days_allowed)"/>
+                      </td>
+                      <td class="mv-postlog-sched__facts">
+                        <div t-att-class="c.length_mismatch ? 'mv-postlog-sched__diff' : ''"><i class="fa fa-clock-o"/> <t t-esc="c.schedule.length"/></div>
+                        <div t-att-class="c.rate_mismatch ? 'mv-postlog-sched__diff' : ''"><i class="fa fa-usd"/> <t t-esc="formatRate(c.schedule.rate)"/><span
+                          class="mv-postlog-sched__delta" t-if="rateDelta(c.schedule)" t-esc="rateDelta(c.schedule)"/></div>
+                        <div><i class="fa fa-file-text-o"/> Deal <t t-esc="c.schedule.deal_number"/></div>
+                      </td>
+                      <td>
+                        <t t-set="diff" t-value="differenceSummary(c)"/>
+                        <span class="mv-postlog-sched__match" t-att-class="diff.count ? 'mv-postlog-sched__match--warn' : 'mv-postlog-sched__match--ok'">
+                          <i t-att-class="diff.count ? 'fa fa-exclamation-circle' : 'fa fa-check-circle'"/>
+                          <span>
+                            <span class="mv-postlog-sched__diff-count" t-esc="diff.label"/>
+                            <t t-foreach="diff.parts" t-as="part" t-key="part_index">
+                              <span class="mv-postlog-sched__diff-detail"
+                                    t-att-class="diff.parts.length > 1 ? 'mv-postlog-sched__diff-detail--bulleted' : ''"
+                                    t-esc="part"/>
+                            </t>
+                          </span>
+                        </span>
+                      </td>
+                      <td class="mv-postlog-sched__col-action">
+                        <button class="btn btn-sm mv-postlog-sched__btn" t-if="c.attachable"
+                                t-att-class="c.suggested ? 'btn-success' : 'btn-outline-success'"
+                                t-att-disabled="state.mutating"
+                                t-on-click="() => c.suggested ? this.attachOneSuggestion(state.drawerRow) : this.attachAlternative(state.drawerRow, c.alt)">Attach</button>
+                        <span class="mv-postlog-sched__blocked" t-if="!c.attachable">Not sold</span>
+                      </td>
+                    </tr>
+                  </t>
+                </tbody>
+              </table>
+            </div>
+
           </section>
 
           <section><h3>Schedule actions</h3>
-            <button class="btn btn-success w-100 mb-2" t-if="state.drawerRow.status === 'suggestion' and state.drawerRow.suggestion_attachable"
-                    t-on-click="() => this.attachOneSuggestion(state.drawerRow)" t-att-disabled="state.mutating"><i class="fa fa-link me-1"/>Attach Suggested Schedule</button>
             <button class="btn btn-outline-warning w-100 mb-2" t-if="state.drawerRow.status === 'matched'"
                     t-on-click="() => this.detachSchedule(state.drawerRow)" t-att-disabled="state.mutating"><i class="fa fa-unlink me-1"/>Detach Schedule</button>
             <label class="mv-fuzzy__field"><span><t t-esc="state.drawerRow.status === 'matched' ? 'Replace with schedule' : 'Manual schedule'"/></span>
