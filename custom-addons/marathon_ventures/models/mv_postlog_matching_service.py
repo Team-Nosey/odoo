@@ -1317,6 +1317,7 @@ class MvPostlogMatching(models.Model):
         'status': 'import_match_status %(d)s, id %(d)s',
         'schedule': 'schedule %(d)s, id %(d)s',
         'reason': 'match_flags %(d)s, id %(d)s',
+        'info': 'info %(d)s, id %(d)s',
     }
 
     @api.model

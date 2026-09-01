@@ -47,6 +47,10 @@
                       title="Re-check unmatched rows against the current Schedules">
                 <i class="fa fa-refresh me-1" t-att-class="state.refreshing ? 'fa-spin' : ''"/><t t-esc="state.refreshing ? 'Re-checking…' : 'Refresh'"/>
               </button>
+              <button class="btn btn-primary" t-on-click="onImport"
+                      t-att-disabled="state.querying or state.mutating">
+                <i class="fa fa-upload me-1"/>Import
+              </button>
             </div>
           </div>
         </section>
@@ -56,7 +60,7 @@
             <button t-att-class="state.activeTab === 'all' ? 'active' : ''" t-on-click="() => this.setTab('all')">All <span t-esc="state.counts.all"/></button>
             <button t-att-class="state.activeTab === 'matched' ? 'active' : ''" t-on-click="() => this.setTab('matched')">Matched <span t-esc="state.counts.matched"/></button>
             <button t-att-class="state.activeTab === 'unmatched' ? 'active' : ''" t-on-click="() => this.setTab('unmatched')">Unmatched <span t-esc="state.counts.unmatched"/></button>
-            <button t-att-class="state.activeTab === 'suggestions' ? 'active' : ''" t-on-click="() => this.setTab('suggestions')">Fuzzy Suggestions <span t-esc="state.counts.suggestions"/></button>
+            <button t-att-class="state.activeTab === 'suggestions' ? 'active' : ''" t-on-click="() => this.setTab('suggestions')">Suggestions <span t-esc="state.counts.suggestions"/></button>
             <button t-att-class="state.activeTab === 'no_suggestion' ? 'active' : ''" t-on-click="() => this.setTab('no_suggestion')">No Suggestion <span t-esc="state.counts.no_suggestion"/></button>
           </nav>
 
@@ -118,15 +122,15 @@
               <thead><tr>
                 <th class="mv-fuzzy__check"><input type="checkbox" t-att-checked="allPageSelected" t-on-change="toggleAll"/></th>
                 <th t-att-aria-sort="sortAria('status')"><button type="button" class="mv-fuzzy__sort-button" t-on-click="() => this.onSort('status')"><span>Status</span><i t-att-class="sortIcon('status')"/></button></th>
-                <th t-att-aria-sort="sortAria('name')"><button type="button" class="mv-fuzzy__sort-button" t-on-click="() => this.onSort('name')"><span>Postlog Data</span><i t-att-class="sortIcon('name')"/></button></th>
+                <th t-att-aria-sort="sortAria('name')"><button type="button" class="mv-fuzzy__sort-button" t-on-click="() => this.onSort('name')"><span>Postlog</span><i t-att-class="sortIcon('name')"/></button></th>
+                <th t-att-aria-sort="sortAria('schedule')"><button type="button" class="mv-fuzzy__sort-button" t-on-click="() => this.onSort('schedule')"><span>Schedule</span><i t-att-class="sortIcon('schedule')"/></button></th>
                 <th t-att-aria-sort="sortAria('network')"><button type="button" class="mv-fuzzy__sort-button" t-on-click="() => this.onSort('network')"><span>Network</span><i t-att-class="sortIcon('network')"/></button></th>
                 <th t-att-aria-sort="sortAria('air_date')"><button type="button" class="mv-fuzzy__sort-button" t-on-click="() => this.onSort('air_date')"><span>Air Date / Time</span><i t-att-class="sortIcon('air_date')"/></button></th>
                 <th t-att-aria-sort="sortAria('length')"><button type="button" class="mv-fuzzy__sort-button" t-on-click="() => this.onSort('length')"><span>Length</span><i t-att-class="sortIcon('length')"/></button></th>
                 <th t-att-aria-sort="sortAria('rate')"><button type="button" class="mv-fuzzy__sort-button" t-on-click="() => this.onSort('rate')"><span>Rate</span><i t-att-class="sortIcon('rate')"/></button></th>
                 <th t-att-aria-sort="sortAria('deal_number')"><button type="button" class="mv-fuzzy__sort-button" t-on-click="() => this.onSort('deal_number')"><span>Network Deal #</span><i t-att-class="sortIcon('deal_number')"/></button></th>
                 <th t-att-aria-sort="sortAria('advertiser_product')"><button type="button" class="mv-fuzzy__sort-button" t-on-click="() => this.onSort('advertiser_product')"><span>Adv / Product</span><i t-att-class="sortIcon('advertiser_product')"/></button></th>
-                <th t-att-aria-sort="sortAria('schedule')"><button type="button" class="mv-fuzzy__sort-button" t-on-click="() => this.onSort('schedule')"><span>Schedule</span><i t-att-class="sortIcon('schedule')"/></button></th>
-                <th t-att-aria-sort="sortAria('reason')"><button type="button" class="mv-fuzzy__sort-button" t-on-click="() => this.onSort('reason')"><span>Reason</span><i t-att-class="sortIcon('reason')"/></button></th>
+                <th t-att-aria-sort="sortAria('info')"><button type="button" class="mv-fuzzy__sort-button" t-on-click="() => this.onSort('info')"><span>Info</span><i t-att-class="sortIcon('info')"/></button></th>
                 <th>Details</th>
               </tr></thead>
               <tbody>
@@ -134,22 +138,19 @@
                   <td class="mv-fuzzy__check"><input type="checkbox" t-att-checked="isSelected(row)" t-on-change="(ev) => this.toggleRow(row, ev)"/></td>
                   <td><span t-att-class="statusBadge(row)" t-esc="row.status_label"/></td>
                   <td><button class="mv-fuzzy__record-link" t-on-click="() => this.openDrawer(row)" t-esc="row.name"/></td>
+                  <!-- Attached schedules only. A suggestion is not a schedule this row
+                       belongs to, and showing one here read as though it already were. -->
+                  <td>
+                    <a t-if="row.attached" class="mv-fuzzy__record-link" target="_blank" rel="noopener"
+                       t-att-href="scheduleOpenUrl(row.attached)" t-on-click.stop="() => {}" t-esc="row.attached.name"/>
+                  </td>
                   <td t-esc="row.network"/>
                   <td><t t-esc="row.air_date"/> <span class="mv-fuzzy__muted"><t t-esc="row.day"/> · <t t-esc="row.air_time"/></span></td>
                   <td t-att-class="row.length_mismatch ? 'mv-fuzzy__text-warning' : ''" t-esc="row.length"/>
                   <td t-att-class="row.rate_mismatch ? 'mv-fuzzy__text-warning' : ''">$<t t-esc="formatRate(row.rate)"/></td>
                   <td t-esc="row.deal_number"/>
                   <td><span class="mv-fuzzy__advertiser-product" t-att-title="row.advertiser_product" t-esc="row.advertiser_product"/></td>
-                  <td>
-                    <a t-if="row.attached" class="mv-fuzzy__record-link" target="_blank" rel="noopener"
-                       t-att-href="scheduleOpenUrl(row.attached)" t-on-click.stop="() => {}" t-esc="row.attached.name"/>
-                    <a t-elif="row.suggested" class="mv-fuzzy__record-link" target="_blank" rel="noopener"
-                       t-att-href="scheduleOpenUrl(row.suggested)" t-on-click.stop="() => {}" t-esc="row.suggested.name"/>
-                    <span t-else="" class="mv-fuzzy__muted">No suggestion</span>
-                    <span class="mv-fuzzy__quality mv-fuzzy__quality--exact" t-if="row.status === 'suggestion' and row.match_quality === 'exact'">Exact</span>
-                    <span class="mv-fuzzy__quality mv-fuzzy__quality--fuzzy" t-if="row.status === 'suggestion' and row.match_quality === 'fuzzy'">Fuzzy</span>
-                  </td>
-                  <td><span class="mv-fuzzy__reason" t-att-title="row.reason" t-esc="row.reason or (row.status === 'matched' ? 'Schedule attached' : 'Ready to attach')"/></td>
+                  <td><span class="mv-fuzzy__reason" t-att-title="row.info" t-esc="row.info"/></td>
                   <td><button class="btn btn-outline-secondary btn-sm" t-on-click="() => this.openDrawer(row)"><i class="fa fa-eye"/> Review</button></td>
                 </tr>
               </tbody>

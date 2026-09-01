@@ -77,8 +77,38 @@ registry.category("web_tour.tours").add("postlog_workbench_tour", {
             trigger: ".mv-fuzzy:contains('UIT-1')",
         },
         {
-            content: "the suggested schedule rendered",
-            trigger: ".mv-fuzzy:contains('A-')",
+            // The Schedule column shows attachments only, so an unmatched row
+            // leaves it blank. What the list surfaces for such a row is the
+            // suggestion count in Info; the schedule itself is in the drawer,
+            // asserted further down.
+            content: "an unmatched row advertises its suggestions in Info",
+            trigger: ".mv-fuzzy__table .mv-fuzzy__reason:contains('suggestion')",
+        },
+        {
+            // Renamed columns and the moved Schedule column, asserted so a
+            // rename cannot silently revert.
+            content: "Postlog is the third column",
+            trigger: ".mv-fuzzy__table thead th:nth-child(3):contains('Postlog')",
+        },
+        {
+            content: "Schedule sits directly beside it",
+            trigger: ".mv-fuzzy__table thead th:nth-child(4):contains('Schedule')",
+        },
+        {
+            content: "the Info column replaced Reason",
+            trigger: ".mv-fuzzy__table thead th:contains('Info')",
+        },
+        {
+            content: "the tab reads Suggestions",
+            trigger: ".mv-fuzzy__tabs button:contains('Suggestions')",
+        },
+        {
+            content: "Import is available from the workbench",
+            trigger: ".mv-fuzzy__filter-actions button:contains('Import')",
+        },
+        {
+            content: "Refresh is available",
+            trigger: ".mv-fuzzy__filter-actions button:contains('Refresh')",
         },
         {
             // Everything below this point is the review drawer. Without these

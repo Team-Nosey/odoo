@@ -297,6 +297,15 @@ export class MvPostlogMatching extends Component {
      *  Stored matching does not self-heal, so this is how a Schedule corrected
      *  after import gets picked up. Unmatched-only, so it cannot undo an
      *  attachment someone made by hand. */
+    /** Open the Postlog upload wizard without leaving the workbench. Reloads on
+     *  close so a completed import shows up without a manual refresh. */
+    async onImport() {
+        await this.action.doAction(
+            "marathon_ventures.action_open_postlog_upload_wizard",
+            { onClose: () => this._loadResults() },
+        );
+    }
+
     async onRefresh() {
         const f = this.state.filters;
         this.state.refreshing = true;
@@ -584,7 +593,7 @@ export class MvPostlogMatching extends Component {
             all: "All",
             matched: "Matched",
             unmatched: "Unmatched",
-            suggestions: "Fuzzy Suggestions",
+            suggestions: "Suggestions",
             no_suggestion: "No Suggestion",
         }[this.state.activeTab] || "All";
     }
