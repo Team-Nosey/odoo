@@ -576,77 +576,6 @@ class MvPostlogMatching(models.Model):
         }
 
     @api.model
-    def fuzzy_match_export_csv(self, program_id, week_start):
-        """Build the filtered exception report as a downloadable CSV."""
-        self._fuzzy_check_access()
-        program, selected_week = self._fuzzy_validate_filters(
-            program_id,
-            week_start,
-        )
-        # The exception report is the Unmatched tab: every row still awaiting a
-        # decision, and nothing that has one. Read from stored matching so the
-        # file and the screen cannot disagree. Fix 19.0.1.2.7 guarantees each of
-        # these rows carries an Info line, so the Reason column is never blank.
-        postlogs = self.search(
-            self._fuzzy_postlog_domain(
-                program.id,
-                selected_week,
-                unmatched_only=False,
-            ) + [('import_match_status', '=', 'unmatched')],
-            order='air_date asc, air_time asc, id asc',
-        )
-        rows = [self._postlog_stored_row(postlog) for postlog in postlogs]
-
-        output = io.StringIO(newline='')
-        writer = csv.writer(output)
-        writer.writerow([
-            'Name',
-            'Network',
-            'Air Date',
-            'Day',
-            'Air Time',
-            'Postlog Data Length',
-            'Rate',
-            'Week',
-            'Network Deal #',
-            'Adv/Product',
-            'Reason',
-        ])
-        exported = 0
-        for row, postlog in zip(rows, postlogs):
-            writer.writerow(self._fuzzy_csv_row([
-                row['name'],
-                row['network'],
-                row['air_date'],
-                row['day'],
-                row['air_time'],
-                row['length'],
-                row['rate'],
-                row['week'],
-                row['deal_number'],
-                row['advertiser_product'],
-                self._postlog_flag_summary(
-                    (postlog.match_flags or '').split(','),
-                ) or row['info'],
-            ]))
-            exported += 1
-
-        safe_program = re.sub(
-            r'[^A-Za-z0-9_-]+',
-            '-',
-            program.display_name,
-        ).strip('-')
-        filename = 'PostlogMatching-%s-%s.csv' % (
-            safe_program or 'Program',
-            fields.Date.to_string(selected_week),
-        )
-        return {
-            'filename': filename,
-            'content': output.getvalue(),
-            'count': exported,
-        }
-
-    @api.model
     def fuzzy_workbench_export_csv(
         self,
         program_id,
@@ -751,27 +680,6 @@ class MvPostlogMatching(models.Model):
             'submitted_by': job.submitted_by_id.display_name,
             'row_count': len(job.postlog_ids),
         }
-
-    @api.model
-    def _fuzzy_validate_filters(self, program_id, week_start):
-        parsed_program_id = self._fuzzy_int(program_id)
-        program = self.env['mv.programs'].search(
-            [('id', '=', parsed_program_id)],
-            limit=1,
-        )
-        if not program:
-            raise UserError(_('Select a valid Program.'))
-        try:
-            selected_week = fields.Date.to_date(week_start)
-        except (TypeError, ValueError):
-            selected_week = False
-        if not selected_week:
-            raise UserError(_('Select a valid week start date.'))
-        if selected_week.weekday() != 0:
-            raise UserError(
-                _('Week must be the Monday that starts the broadcast week.')
-            )
-        return program, selected_week
 
     @api.model
     def _fuzzy_validate_optional_filters(self, program_id, week_start):
