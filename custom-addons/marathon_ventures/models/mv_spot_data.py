@@ -7,6 +7,7 @@ import logging
 import re
 from odoo import models, fields, api, _
 from odoo.exceptions import ValidationError
+from odoo.tools.sql import create_index
 
 _logger = logging.getLogger(__name__)
 
@@ -139,6 +140,43 @@ class MvSpotData(models.Model):
     # currently a suggestion count for unmatched rows, blank for matched - so it
     # can carry non-matching notes later without another field.
     info = fields.Char(string='Info', size=255)
+
+    # Composite indexes for the Postlog Workbench. The ORM builds the
+    # single-column ones for every field marked index=True; these are the
+    # multi-column and partial ones it cannot express.
+    #
+    # Declared here rather than only in a post-migration: migrations do not run
+    # on install, so a freshly created database - a new staging box, a rebuilt
+    # environment - silently had none of these while an upgraded one had all
+    # three. init() runs on both paths, and create_index is a no-op when the
+    # index already exists.
+    _POSTLOG_WORKBENCH_INDEXES = (
+        # Fronts every workbench request.
+        (
+            'mv_spot_data_workbench_filter_idx',
+            ['import_program', 'import_week_value', 'import_match_status'],
+            '',
+        ),
+        # The Suggestions / No Suggestion tabs: unmatched rows split by whether
+        # a suggestion exists. Partial, because matched rows are the large
+        # majority and are never queried this way.
+        (
+            'mv_spot_data_suggestion_idx',
+            ['import_program', 'import_week_value', 'suggested_schedule'],
+            "import_match_status = 'unmatched'",
+        ),
+        # Default ordering of the list.
+        (
+            'mv_spot_data_airdate_order_idx',
+            ['air_date', 'air_time', 'id'],
+            '',
+        ),
+    )
+
+    def init(self):
+        super().init()
+        for name, columns, where in self._POSTLOG_WORKBENCH_INDEXES:
+            create_index(self.env.cr, name, self._table, columns, where=where)
 
     # === Computed / Roll-Up ===
 
