@@ -343,6 +343,12 @@ class MvPostlogMatching(models.Model):
                 'schedule': schedule.id,
                 'import_match_status': 'matched',
                 'import_match_detail': detail,
+                # The row is settled, so the suggestion state has to go with it.
+                # Left behind, Info kept reading "3 suggestion(s)" next to a
+                # Matched badge, and the candidate JSON sat on a row that will
+                # never be reviewed again - dead weight on every matched row.
+                'info': False,
+                'possible_schedules': False,
             })
 
         return {
@@ -488,6 +494,18 @@ class MvPostlogMatching(models.Model):
         }
 
     @api.model
+    def fuzzy_match_row(self, postlog_id):
+        """One stored row payload, independent of the current filter.
+
+        The drawer needs this to keep showing a row after Refresh attaches it:
+        the row leaves the filtered list, but the operator still wants to see
+        what happened to the row they were looking at.
+        """
+        self._fuzzy_check_access()
+        postlog = self.browse(int(postlog_id)).exists()
+        return self._postlog_stored_row(postlog) if postlog else False
+
+    @api.model
     def fuzzy_match_refresh(self, program_id, week_start, import_job_id=False):
         """Re-run matching for the unmatched rows of a Program/week.
 
@@ -565,20 +583,19 @@ class MvPostlogMatching(models.Model):
             program_id,
             week_start,
         )
+        # The exception report is the Unmatched tab: every row still awaiting a
+        # decision, and nothing that has one. Read from stored matching so the
+        # file and the screen cannot disagree. Fix 19.0.1.2.7 guarantees each of
+        # these rows carries an Info line, so the Reason column is never blank.
         postlogs = self.search(
             self._fuzzy_postlog_domain(
                 program.id,
                 selected_week,
                 unmatched_only=False,
-            ),
+            ) + [('import_match_status', '=', 'unmatched')],
             order='air_date asc, air_time asc, id asc',
         )
-        rows = self._fuzzy_build_rows(
-            postlogs,
-            program,
-            selected_week,
-            use_attached=True,
-        )
+        rows = [self._postlog_stored_row(postlog) for postlog in postlogs]
 
         output = io.StringIO(newline='')
         writer = csv.writer(output)
@@ -596,13 +613,7 @@ class MvPostlogMatching(models.Model):
             'Reason',
         ])
         exported = 0
-        for row in rows:
-            if not (
-                row['reason']
-                or row['time_mismatch']
-                or row['length_mismatch']
-            ):
-                continue
+        for row, postlog in zip(rows, postlogs):
             writer.writerow(self._fuzzy_csv_row([
                 row['name'],
                 row['network'],
@@ -614,7 +625,9 @@ class MvPostlogMatching(models.Model):
                 row['week'],
                 row['deal_number'],
                 row['advertiser_product'],
-                row['reason'],
+                self._postlog_flag_summary(
+                    (postlog.match_flags or '').split(','),
+                ) or row['info'],
             ]))
             exported += 1
 
@@ -651,36 +664,32 @@ class MvPostlogMatching(models.Model):
         program, selected_week = self._fuzzy_validate_optional_filters(
             program_id, week_start
         )
+        # Exactly the query fuzzy_match_search runs for the visible page, minus
+        # the LIMIT: the export is the tab you are looking at, in the order you
+        # sorted it, and it is read from the same stored fields.
         postlogs = self.search(
-            self._fuzzy_postlog_domain(
-                program.id if program else False,
-                selected_week,
-                unmatched_only=False,
-                import_job_id=import_job_id,
+            self._postlog_stored_domain(
+                self._fuzzy_postlog_domain(
+                    program.id if program else False,
+                    selected_week,
+                    unmatched_only=False,
+                    import_job_id=import_job_id,
+                ),
+                status,
+                issue_filter,
+                air_date,
+                search_term,
             ),
-            order='air_date asc, air_time asc, id asc',
+            order=self._postlog_stored_order(sort_by, sort_direction),
         )
-        rows = self._fuzzy_build_rows(
-            postlogs, program, selected_week, use_attached=True
-        )
-        for row, postlog in zip(rows, postlogs):
-            self._fuzzy_classify_row(row, postlog)
-        rows = self._fuzzy_filter_workbench_rows(
-            rows,
-            status=status,
-            search_term=search_term,
-            air_date=air_date,
-            issue_filter=issue_filter,
-            sort_by=sort_by,
-            sort_direction=sort_direction,
-        )
+        rows = [self._postlog_stored_row(postlog) for postlog in postlogs]
 
         output = io.StringIO(newline='')
         writer = csv.writer(output)
         writer.writerow([
             'Postlog Data', 'Status', 'Match Quality', 'Network', 'Air Date',
             'Air Time', 'Length', 'Rate', 'Week', 'Network Deal #',
-            'Adv/Product', 'Schedule', 'Reason',
+            'Adv/Product', 'Schedule', 'Info',
         ])
         for row in rows:
             schedule = row.get('attached') or row.get('suggested') or {}
@@ -688,7 +697,7 @@ class MvPostlogMatching(models.Model):
                 row['name'], row['status_label'], row['match_quality_label'],
                 row['network'], row['air_date'], row['air_time'], row['length'],
                 row['rate'], row['week'], row['deal_number'],
-                row['advertiser_product'], schedule.get('name', ''), row['reason'],
+                row['advertiser_product'], schedule.get('name', ''), row['info'],
             ]))
         safe_program = re.sub(
             r'[^A-Za-z0-9_-]+',
@@ -812,174 +821,6 @@ class MvPostlogMatching(models.Model):
         return domain
 
     @api.model
-    def _fuzzy_classify_row(self, row, postlog):
-        if postlog.schedule:
-            status = 'matched'
-        elif row.get('suggested'):
-            status = 'suggestion'
-        else:
-            status = 'no_suggestion'
-        row.update({
-            'status': status,
-            'status_label': {
-                'matched': _('Matched'),
-                'suggestion': _('Fuzzy Suggestion'),
-                'no_suggestion': _('No Suggestion'),
-            }[status],
-            'attached': (
-                self._fuzzy_schedule_payload(postlog.schedule)
-                if postlog.schedule else False
-            ),
-            'agency': postlog.agency or '',
-            'title': postlog.commercial_title or '',
-            'match_detail': postlog.import_match_detail or '',
-            'import_job_name': postlog.import_job.name if postlog.import_job else '',
-        })
-
-    @api.model
-    def _fuzzy_filter_workbench_rows(
-        self,
-        rows,
-        status='all',
-        search_term='',
-        air_date=False,
-        issue_filter='',
-        sort_by='air_date',
-        sort_direction='asc',
-    ):
-        status = status if status in {
-            'all', 'matched', 'unmatched', 'suggestions', 'no_suggestion'
-        } else 'all'
-        status_map = {
-            'matched': 'matched',
-            'suggestions': 'suggestion',
-            'no_suggestion': 'no_suggestion',
-        }
-        if status == 'all':
-            result = list(rows)
-        elif status == 'unmatched':
-            result = [
-                row for row in rows
-                if row['status'] in ('suggestion', 'no_suggestion')
-            ]
-        else:
-            result = [row for row in rows if row['status'] == status_map[status]]
-
-        needle = normalize_match_text(search_term)
-        if needle:
-            result = [
-                row for row in result
-                if needle in normalize_match_text(' '.join([
-                    str(row.get('name') or ''),
-                    str(row.get('advertiser_product') or ''),
-                    str(row.get('deal_number') or ''),
-                    str((row.get('attached') or {}).get('name') or ''),
-                    str((row.get('suggested') or {}).get('name') or ''),
-                ]))
-            ]
-        if air_date:
-            try:
-                normalized_date = fields.Date.to_string(fields.Date.to_date(air_date))
-            except (TypeError, ValueError):
-                normalized_date = ''
-            if normalized_date:
-                result = [row for row in result if row['air_date'] == normalized_date]
-
-        issue_checks = {
-            'time': lambda row: row['time_mismatch'],
-            'length': lambda row: row['length_mismatch'],
-            'rate': lambda row: row['rate_mismatch'],
-            'day': lambda row: row['day_mismatch'],
-            'ready': lambda row: (
-                row['status'] == 'suggestion' and row['match_quality'] == 'exact'
-            ),
-            'ambiguous': lambda row: row['ambiguous_count'] > 1,
-            'missing_deal': lambda row: row['reason'] == _('Missing deal number'),
-        }
-        if issue_filter in issue_checks:
-            result = [row for row in result if issue_checks[issue_filter](row)]
-
-        def natural_text(value):
-            return tuple(
-                (0, int(part)) if part.isdigit() else (1, part)
-                for part in re.split(r'(\d+)', normalize_match_text(value))
-                if part
-            )
-
-        def time_value(row):
-            parsed = self._fuzzy_parse_time(row.get('air_time'))
-            return (
-                (parsed.hour * 3600) + (parsed.minute * 60) + parsed.second
-                if parsed else 0
-            )
-
-        def schedule_name(row):
-            schedule = row.get('attached') or row.get('suggested') or {}
-            return schedule.get('name') or ''
-
-        def visible_reason(row):
-            return row.get('reason') or (
-                _('Schedule attached')
-                if row.get('status') == 'matched'
-                else _('Ready to attach')
-            )
-
-        sort_keys = {
-            'status': lambda row: (
-                natural_text(row.get('status_label')), row['air_date'], row['id']
-            ),
-            'name': lambda row: (
-                natural_text(row.get('name')), row['air_date'], row['id']
-            ),
-            'network': lambda row: (
-                natural_text(row.get('network')), row['air_date'], row['id']
-            ),
-            'air_date': lambda row: (
-                row.get('air_date') or '', time_value(row), row['id']
-            ),
-            'length': lambda row: (
-                self._fuzzy_parse_length(row.get('length')) or 0,
-                row['air_date'], row['id'],
-            ),
-            'rate': lambda row: (
-                float(row.get('rate') or 0), row['air_date'], row['id']
-            ),
-            'deal_number': lambda row: (
-                natural_text(row.get('deal_number')), row['air_date'], row['id']
-            ),
-            'advertiser_product': lambda row: (
-                natural_text(row.get('advertiser_product')), row['air_date'], row['id']
-            ),
-            'schedule': lambda row: (
-                natural_text(schedule_name(row)), row['air_date'], row['id']
-            ),
-            'reason': lambda row: (
-                natural_text(visible_reason(row)), row['air_date'], row['id']
-            ),
-        }
-        sort_by = sort_by if sort_by in sort_keys else 'air_date'
-        reverse = str(sort_direction or '').lower() == 'desc'
-        missing_checks = {
-            'status': lambda row: not row.get('status_label'),
-            'name': lambda row: not row.get('name'),
-            'network': lambda row: not row.get('network'),
-            'air_date': lambda row: not row.get('air_date'),
-            'length': lambda row: self._fuzzy_parse_length(row.get('length')) is None,
-            'rate': lambda row: row.get('rate') in (None, ''),
-            'deal_number': lambda row: not row.get('deal_number'),
-            'advertiser_product': lambda row: not row.get('advertiser_product'),
-            'schedule': lambda row: not schedule_name(row),
-            'reason': lambda row: not visible_reason(row),
-        }
-        has_missing_value = missing_checks[sort_by]
-        populated = [row for row in result if not has_missing_value(row)]
-        missing = [row for row in result if has_missing_value(row)]
-        return (
-            sorted(populated, key=sort_keys[sort_by], reverse=reverse)
-            + sorted(missing, key=lambda row: row['id'])
-        )
-
-    @api.model
     def _fuzzy_validate_selected_postlogs(
         self,
         postlog_ids,
@@ -1030,33 +871,28 @@ class MvPostlogMatching(models.Model):
         program, selected_week = (
             self._fuzzy_validate_optional_filters(program_id, week_start)
         )
-        postlogs = self.search(
-            self._fuzzy_postlog_domain(
-                program.id if program else False,
-                selected_week,
-                unmatched_only=False,
-                import_job_id=import_job_id,
+        # The same query the screen ran, against stored matching. This used to
+        # re-analyse the whole week in Python and hand the caller those rows -
+        # so a bulk Attach Suggested could attach a schedule the operator had
+        # never seen, whenever the live analysis and the stored verdict
+        # disagreed. That disagreement is what put 2,012 rows in the review
+        # queue on 8/17; it has no business on the write path.
+        filtered = self.search(
+            self._postlog_stored_domain(
+                self._fuzzy_postlog_domain(
+                    program.id if program else False,
+                    selected_week,
+                    unmatched_only=False,
+                    import_job_id=import_job_id,
+                ),
+                status,
+                issue_filter,
+                air_date,
+                search_term,
             ),
-            order='air_date asc, air_time asc, id asc',
+            order=self._postlog_stored_order(sort_by, sort_direction),
         )
-        rows = self._fuzzy_build_rows(
-            postlogs,
-            program,
-            selected_week,
-            use_attached=True,
-        )
-        for row, postlog in zip(rows, postlogs):
-            self._fuzzy_classify_row(row, postlog)
-        filtered_rows = self._fuzzy_filter_workbench_rows(
-            rows,
-            status=status,
-            search_term=search_term,
-            air_date=air_date,
-            issue_filter=issue_filter,
-            sort_by=sort_by,
-            sort_direction=sort_direction,
-        )
-        filtered_ids = [row['id'] for row in filtered_rows]
+        filtered_ids = filtered.ids
         filtered_id_set = set(filtered_ids)
         if selection.get('all_matching'):
             excluded_ids = {
@@ -1079,61 +915,14 @@ class MvPostlogMatching(models.Model):
                 )
         if not selected_ids:
             raise UserError(_('Select at least one Postlog row.'))
-        selected_set = set(selected_ids)
+        # Rows are built only for what was actually selected, and only from
+        # stored fields - no matching. Selecting all 2,184 rows of a week no
+        # longer analyses all 2,184.
+        selected_postlogs = self.browse(selected_ids)
         selected_rows = [
-            row for row in filtered_rows if row['id'] in selected_set
+            self._postlog_stored_row(postlog) for postlog in selected_postlogs
         ]
-        records_by_id = {postlog.id: postlog for postlog in postlogs}
-        selected_postlogs = self.browse()
-        for row_id in selected_ids:
-            selected_postlogs |= records_by_id[row_id]
         return selected_postlogs, selected_rows
-
-    @api.model
-    def _fuzzy_build_rows(
-        self,
-        postlogs,
-        program,
-        selected_week,
-        use_attached=False,
-    ):
-        groups = {}
-        contexts = {}
-        for postlog in postlogs:
-            row_program = postlog.import_program or program
-            row_week = postlog.import_week_value or selected_week
-            key = (row_program.id if row_program else False, row_week)
-            groups.setdefault(key, self.browse())
-            groups[key] |= postlog
-            contexts[key] = (row_program, row_week)
-
-        candidate_maps = {}
-        accepted_networks = {}
-        for key, grouped_postlogs in groups.items():
-            row_program, row_week = contexts[key]
-            candidate_maps[key] = self._fuzzy_candidate_map(
-                grouped_postlogs,
-                row_program,
-                row_week,
-            )
-            accepted_networks[key] = self._fuzzy_network_names(row_program)
-
-        result = []
-        for postlog in postlogs:
-            row_program = postlog.import_program or program
-            row_week = postlog.import_week_value or selected_week
-            key = (row_program.id if row_program else False, row_week)
-            result.append(self._fuzzy_build_row(
-                postlog,
-                row_program,
-                candidate_maps[key].get(
-                    (postlog.network_deal_number or '').strip(),
-                    [],
-                ),
-                accepted_networks[key],
-                postlog.schedule if use_attached else False,
-            ))
-        return result
 
     # ------------------------------------------------------------------
     # Stored matching, written by the import
@@ -1209,29 +998,52 @@ class MvPostlogMatching(models.Model):
 
         Returns {'matched': n, 'unmatched': n}.
         """
+        # Group by each row's OWN program/week rather than trusting the caller's.
+        # The import passes values that match its rows, but Refresh runs from the
+        # workbench filters - which may be "All Programs" with no week. Passing
+        # those straight through produced an empty candidate map and quietly
+        # re-stored every row as "no schedules found", destroying suggestions.
+        groups = {}
+        for postlog in postlogs:
+            row_program = postlog.import_program or program
+            row_week = postlog.import_week_value or week
+            key = (row_program.id if row_program else False, row_week)
+            groups.setdefault(key, (row_program, row_week, self.browse()))
+            groups[key] = (row_program, row_week, groups[key][2] | postlog)
+
+        counts = {'matched': 0, 'unmatched': 0}
+        for row_program, row_week, grouped in groups.values():
+            counts_part = self._postlog_store_matching_group(
+                grouped, row_program, row_week, attach=attach,
+            )
+            counts['matched'] += counts_part['matched']
+            counts['unmatched'] += counts_part['unmatched']
+        return counts
+
+    @api.model
+    def _postlog_store_matching_group(self, postlogs, program, week, attach=True):
+        """One program/week's worth of rows. See _postlog_store_matching."""
+        if not program or not week:
+            # Nothing to match against. Leave the rows exactly as they are rather
+            # than blanking what a previous run stored.
+            return {'matched': 0, 'unmatched': 0}
+
         candidate_map = self._fuzzy_candidate_map(postlogs, program, week)
         accepted_networks = self._fuzzy_network_names(program)
         counts = {'matched': 0, 'unmatched': 0}
 
         for postlog in postlogs:
             deal_number = (postlog.network_deal_number or '').strip()
-            blank = {
-                'schedule': False,
-                'suggested_schedule': False,
-                'possible_schedules': False,
-                'info': False,
-                'import_match_status': 'unmatched',
-            }
 
             if not deal_number:
-                postlog.write(dict(blank, match_flags=self._postlog_flags(['missing_deal'])))
+                postlog.write(self._postlog_unresolved_vals('missing_deal'))
                 counts['unmatched'] += 1
                 continue
 
             if not postlog.air_date:
                 # Without an air date there is nothing to place against a
                 # rotation, so every candidate would be a coin toss. Offer none.
-                postlog.write(dict(blank, match_flags=self._postlog_flags(['missing_air_date'])))
+                postlog.write(self._postlog_unresolved_vals('missing_air_date'))
                 counts['unmatched'] += 1
                 continue
 
@@ -1246,7 +1058,7 @@ class MvPostlogMatching(models.Model):
                 if analysis['network_match']
             ]
             if not eligible:
-                postlog.write(dict(blank, match_flags=self._postlog_flags(['no_schedules'])))
+                postlog.write(self._postlog_unresolved_vals('no_schedules'))
                 counts['unmatched'] += 1
                 continue
 
@@ -1287,7 +1099,7 @@ class MvPostlogMatching(models.Model):
                     self._postlog_candidate_payload(analysis) for analysis in offered
                 ],
                 'match_flags': self._postlog_flags(flags),
-                'info': _('%(count)s suggestion(s)') % {'count': len(offered)},
+                'info': self._postlog_info_text(flags, len(offered)),
                 'import_match_status': 'unmatched',
             })
             counts['unmatched'] += 1
@@ -1298,12 +1110,17 @@ class MvPostlogMatching(models.Model):
     # Reading stored matching back out, for the workbench
     # ------------------------------------------------------------------
 
+    # issue filter -> the flag tokens that satisfy it. "Time issue" covers both
+    # kinds: a hard mismatch (`time`) and a spot that aired outside its rotation
+    # but inside the fuzzy buffer (`time_buffer`). Listing only `time` hid the
+    # buffer rows, which are precisely the ones held back for review.
     _POSTLOG_FLAG_DOMAIN = {
-        'day': 'day',
-        'time': 'time',
-        'length': 'length',
-        'rate': 'rate',
-        'ambiguous': 'ambiguous',
+        'day': ('day',),
+        'time': ('time', 'time_buffer'),
+        'length': ('length',),
+        'rate': ('rate',),
+        'ambiguous': ('ambiguous',),
+        'missing_deal': ('missing_deal',),
     }
 
     _POSTLOG_SORT_COLUMNS = {
@@ -1316,7 +1133,6 @@ class MvPostlogMatching(models.Model):
         'advertiser_product': 'product %(d)s, id %(d)s',
         'status': 'import_match_status %(d)s, id %(d)s',
         'schedule': 'schedule %(d)s, id %(d)s',
-        'reason': 'match_flags %(d)s, id %(d)s',
         'info': 'info %(d)s, id %(d)s',
     }
 
@@ -1354,17 +1170,19 @@ class MvPostlogMatching(models.Model):
             domain += [('import_match_status', '=', 'unmatched'),
                        ('suggested_schedule', '=', False)]
 
-        token = self._POSTLOG_FLAG_DOMAIN.get(issue_filter)
-        if token:
-            # Sentinel commas make this an exact-token match: ',time,' cannot
-            # also hit ',time_buffer,'.
-            domain += [('match_flags', 'ilike', ',%s,' % token)]
+        tokens = self._POSTLOG_FLAG_DOMAIN.get(issue_filter)
+        if tokens:
+            # Sentinel commas make each term an exact-token match, so ',time,'
+            # cannot accidentally hit ',time_buffer,' - the two are ORed when a
+            # filter genuinely wants both.
+            domain += ['|'] * (len(tokens) - 1)
+            domain += [('match_flags', 'ilike', ',%s,' % token) for token in tokens]
         elif issue_filter == 'ready':
+            # Not offered in the dropdown. Still reachable: Detach re-analyses
+            # with attach=False, which leaves a clean row unmatched.
             domain += [('import_match_status', '=', 'unmatched'),
                        ('suggested_schedule', '!=', False),
                        ('match_flags', '=', '')]
-        elif issue_filter == 'missing_deal':
-            domain += [('match_flags', 'ilike', ',missing_deal,')]
 
         if air_date:
             try:
@@ -1405,11 +1223,24 @@ class MvPostlogMatching(models.Model):
         return counts
 
     @api.model
-    def _postlog_stored_reason(self, postlog, flags, candidates):
-        """The INFO/reason line, rebuilt from stored flags.
+    def _postlog_info_text(self, flags, suggestion_count):
+        """The Info line, stored on the row at match time.
 
-        Wording lives here rather than in the stored row so it can change
-        without a re-import.
+        One column, three kinds of value:
+
+          matched, nothing to say        -> blank
+          something to choose from       -> "3 suggestion(s)"
+          nothing to choose from at all  -> why not
+
+        That last case is the fix: a No Suggestion row used to store nothing, so
+        the column was blank on exactly the rows whose problem the operator most
+        needs named. The text existed - it was computed on every read and
+        rendered nowhere.
+
+        Stored rather than derived on read, so Postgres can sort and filter it;
+        that is the point of the column at 200k rows. The cost is that changing
+        this wording needs a Refresh - which only touches unmatched rows, and
+        only unmatched rows ever carry text.
         """
         if 'missing_deal' in flags:
             return _('Missing deal number')
@@ -1417,34 +1248,55 @@ class MvPostlogMatching(models.Model):
             return _('No schedules found for deal number')
         if 'missing_air_date' in flags:
             return _('Missing air date')
-        if postlog.schedule:
-            return ''
-        hard = [f for f in flags if f != 'ambiguous']
-        if not hard and 'ambiguous' in flags:
-            return _('Tied with another schedule; review before attaching')
-        if not hard:
-            # Empty, not "Ready to attach" - the template supplies that text as
-            # its fallback, and duplicating it here made reason truthy for rows
-            # that have nothing wrong with them.
-            return ''
-        if hard == ['time_buffer']:
-            distance = (candidates[0] or {}).get('time_distance') if candidates else None
-            return _('Within fuzzy buffer (%(minutes)s minute(s) from rotation)') % {
-                'minutes': distance if distance is not None else '?',
-            }
-        labels = {
-            'day': _('Day mismatch'), 'time': _('Time mismatch'),
-            'rate': _('Rate mismatch'), 'length': _('Length mismatch'),
-            'time_buffer': _('Outside rotation'),
+        if suggestion_count:
+            return _('%(count)s suggestion(s)') % {'count': suggestion_count}
+        return ''
+
+    @api.model
+    def _postlog_flag_summary(self, flags):
+        """What is wrong with a row, in words, for the exception report.
+
+        A presentation of stored match_flags - no analysis, no second opinion.
+        Info answers "what do I do next" ("3 suggestion(s)"), which is the right
+        question on screen where the drawer is one click away. A CSV that lands
+        in somebody's inbox has to answer "what is wrong" instead.
+        """
+        labels = (
+            ('missing_deal', _('Missing deal number')),
+            ('no_schedules', _('No schedules found for deal number')),
+            ('missing_air_date', _('Missing air date')),
+            ('day', _('Day mismatch')),
+            ('time', _('Time mismatch')),
+            ('time_buffer', _('Outside rotation')),
+            ('rate', _('Rate mismatch')),
+            ('length', _('Length mismatch')),
+            ('ambiguous', _('Tied with another schedule')),
+        )
+        return ', '.join(text for token, text in labels if token in flags)
+
+    @api.model
+    def _postlog_unresolved_vals(self, token):
+        """The write for one of the three dead-end outcomes.
+
+        Clears every match field and stores the Info line that says why.
+        """
+        return {
+            'schedule': False,
+            'suggested_schedule': False,
+            'possible_schedules': False,
+            'import_match_status': 'unmatched',
+            'match_flags': self._postlog_flags([token]),
+            'info': self._postlog_info_text([token], 0),
         }
-        return ', '.join(labels.get(f, f) for f in hard)
 
     @api.model
     def _postlog_stored_row(self, postlog):
         """A workbench row built from stored fields - no matching performed.
 
-        Mirrors the payload _fuzzy_build_row produces so the client is unchanged;
-        the difference is entirely where the values come from.
+        This is the only row builder. It replaced _fuzzy_build_row, which
+        re-analysed every row on every read - a second implementation of the
+        matching rules, and so a second opinion that could disagree with the
+        one the import stored.
         """
         candidates = list(postlog.possible_schedules or [])
         flags = [token for token in (postlog.match_flags or '').split(',') if token]
@@ -1464,12 +1316,15 @@ class MvPostlogMatching(models.Model):
         else:
             status = 'no_suggestion'
 
-        reason = self._postlog_stored_reason(postlog, flags, candidates)
         hard = [f for f in flags if f != 'ambiguous']
         return {
             'id': postlog.id,
             'name': postlog.name or '',
-            'title': postlog.name or '',
+            # commercial_title, per the field map at the top of this file - not
+            # the record name. Nothing renders `title` today, which is exactly
+            # why this was worth correcting: the next thing to read it would
+            # have got the wrong value silently.
+            'title': postlog.commercial_title or '',
             'network': (
                 postlog.broadcast_network or postlog.network
                 or (postlog.import_program.display_name if postlog.import_program else '')
@@ -1491,11 +1346,15 @@ class MvPostlogMatching(models.Model):
             'match_detail': postlog.import_match_detail or '',
             'info': postlog.info or '',
             'status': status,
-            'status_label': {
-                'matched': _('Matched'),
-                'suggestion': _('Fuzzy Suggestion'),
-                'no_suggestion': _('No Suggestion'),
-            }[status],
+            # Two labels, matching the two stored codes. `status` keeps three
+            # values because the drawer and the Detach button branch on the
+            # suggestion/no-suggestion split; the badge stops repeating it. The
+            # Info column now names the difference per row, and "Fuzzy
+            # Suggestion" was the wording that read as though the importer had
+            # failed to match rows it had in fact matched exactly.
+            'status_label': (
+                _('Matched') if status == 'matched' else _('Unmatched')
+            ),
             'attached': attached,
             'suggested': suggested,
             'alternatives': candidates[1:],
@@ -1505,8 +1364,6 @@ class MvPostlogMatching(models.Model):
             'match_quality_label': '' if not suggested else (
                 _('Exact') if not hard else _('Fuzzy')
             ),
-            'reason': reason,
-            'explanation': reason,
             'ambiguous_count': 2 if 'ambiguous' in flags else 1,
             'day_mismatch': 'day' in flags,
             'time_mismatch': 'time' in flags,
@@ -1546,211 +1403,6 @@ class MvPostlogMatching(models.Model):
             ).strip()
             result.setdefault(deal_number, []).append(schedule)
         return result
-
-    @api.model
-    def _fuzzy_build_row(
-        self,
-        postlog,
-        program,
-        schedules,
-        accepted_networks=None,
-        attached_schedule=False,
-    ):
-        day = postlog.air_date.strftime('%a') if postlog.air_date else ''
-        reason = ''
-        suggested = False
-        suggested_analysis = False
-        ambiguous_count = 0
-        alternatives = []
-
-        if attached_schedule:
-            suggested_analysis = self._fuzzy_analyze_schedule(
-                postlog,
-                program,
-                attached_schedule,
-                accepted_networks,
-            )
-            suggested = attached_schedule
-        elif not (postlog.network_deal_number or '').strip():
-            reason = _('Missing deal number')
-        elif not (postlog.air_time or '').strip():
-            reason = _('Missing air time')
-        elif not postlog.air_date:
-            # Distinct from a day *mismatch*: with no date there is nothing to
-            # compare, so offering a schedule would be a guess.
-            reason = _('Missing air date')
-        else:
-            analyses = [
-                self._fuzzy_analyze_schedule(
-                    postlog,
-                    program,
-                    schedule,
-                    accepted_networks,
-                )
-                for schedule in schedules
-            ]
-            # Network is the only hard boundary: a different network's
-            # schedule is genuinely the wrong record. A rate or day mismatch is
-            # a real trafficking discrepancy the operator should SEE against the
-            # schedule it nearly matched, so those stay eligible and surface as
-            # fuzzy suggestions with a reason instead of vanishing.
-            eligible = [
-                analysis
-                for analysis in analyses
-                if analysis['network_match']
-            ]
-            if eligible:
-                eligible.sort(key=self._fuzzy_analysis_sort_key)
-                suggested_analysis = eligible[0]
-                suggested = suggested_analysis['schedule']
-                winning_key = self._fuzzy_analysis_quality_key(
-                    suggested_analysis
-                )
-                ambiguous_count = sum(
-                    1
-                    for analysis in eligible
-                    if self._fuzzy_analysis_quality_key(analysis) == winning_key
-                )
-                # Every candidate was already analysed and ranked; keeping the
-                # runners-up lets the drawer offer them instead of throwing the
-                # work away. Capped so a deal with 150 schedules cannot bloat
-                # the payload.
-                alternatives = [
-                    self._fuzzy_alternative_payload(analysis)
-                    for analysis in eligible[1:self._FUZZY_MAX_ALTERNATIVES + 1]
-                    if self._fuzzy_mismatch_count(analysis)
-                    <= self._FUZZY_MAX_ALTERNATIVE_DIFFERENCES
-                ]
-            else:
-                reason = self._fuzzy_no_suggestion_reason(analyses)
-
-        length_mismatch = False
-        time_mismatch = False
-        rate_mismatch = False
-        deal_mismatch = False
-        network_mismatch = False
-        day_mismatch = False
-        suggestion_attachable = False
-        # How far outside the rotation the spot aired, for the drawer's
-        # Rotation column. None when there is no suggestion to measure against.
-        time_distance = None
-        exact_time_match = False
-
-        if suggested_analysis:
-            time_mismatch = not suggested_analysis['time_match']
-            length_mismatch = not suggested_analysis['length_match']
-            rate_mismatch = not suggested_analysis['rate_match']
-            deal_mismatch = not suggested_analysis['deal_match']
-            network_mismatch = not suggested_analysis['network_match']
-            day_mismatch = not suggested_analysis['day_match']
-            suggestion_attachable = suggested.status == 'sold'
-            time_distance = suggested_analysis['time_distance']
-            exact_time_match = suggested_analysis['exact_time_match']
-
-            if not suggested_analysis['network_match']:
-                reason = _('Network mismatch')
-            elif not suggested_analysis['week_match']:
-                reason = _('Week mismatch')
-            elif not suggested_analysis['deal_match']:
-                reason = _('Deal number mismatch')
-            elif not suggested_analysis['rate_match']:
-                reason = _('Rate mismatch')
-            elif not suggested_analysis['day_match']:
-                reason = _('Day mismatch')
-            elif suggested.status == 'canceled':
-                reason = _('Canceled')
-            elif suggested.status and suggested.status != 'sold':
-                reason = (
-                    self._fuzzy_selection_label(suggested, 'status')
-                    or suggested.status
-                )
-            elif time_mismatch:
-                reason = _('Out of Rotation')
-            elif length_mismatch:
-                reason = _(
-                    'Length mismatch: postlog=%(postlog)s, schedule=%(schedule)s'
-                ) % {
-                    'postlog': (
-                        self._fuzzy_parse_length(postlog.length)
-                        or ''
-                    ),
-                    'schedule': (
-                        suggested_analysis['schedule_length']
-                        or ''
-                    ),
-                }
-            elif ambiguous_count > 1:
-                reason = _(
-                    '%(count)s equally ranked schedules; review before attaching'
-                ) % {'count': ambiguous_count}
-            elif not suggested_analysis['exact_time_match']:
-                reason = _(
-                    'Within fuzzy buffer (%(minutes)s minute(s) from rotation)'
-                ) % {'minutes': suggested_analysis['time_distance'] or 0}
-
-        exact_match = bool(
-            suggested_analysis
-            and suggested.status == 'sold'
-            and ambiguous_count <= 1
-            and suggested_analysis['network_match']
-            and suggested_analysis['deal_match']
-            and suggested_analysis['week_match']
-            and suggested_analysis['rate_match']
-            and suggested_analysis['day_match']
-            and suggested_analysis['exact_time_match']
-            and suggested_analysis['length_match']
-        )
-
-        return {
-            'id': postlog.id,
-            'name': postlog.display_name or '',
-            'network': (
-                postlog.broadcast_network
-                or postlog.network
-                or (program.display_name if program else '')
-                or ''
-            ),
-            'air_date': (
-                fields.Date.to_string(postlog.air_date)
-                if postlog.air_date
-                else ''
-            ),
-            'day': day,
-            'air_time': postlog.air_time or '',
-            'length': self._fuzzy_parse_length(postlog.length) or '',
-            'rate': postlog.spot_rate or 0.0,
-            'week': (
-                fields.Date.to_string(postlog.import_week_value)
-                if postlog.import_week_value
-                else ''
-            ),
-            'deal_number': postlog.network_deal_number or '',
-            'advertiser_product': postlog.product or '',
-            'reason': reason or '',
-            'suggested': (
-                self._fuzzy_schedule_payload(suggested)
-                if suggested
-                else False
-            ),
-            'suggestion_attachable': suggestion_attachable,
-            'match_quality': 'exact' if exact_match else ('fuzzy' if suggested else ''),
-            'match_quality_label': _('Exact') if exact_match else (_('Fuzzy') if suggested else ''),
-            'explanation': self._fuzzy_match_explanation(
-                suggested_analysis,
-                reason,
-                ambiguous_count,
-            ),
-            'ambiguous_count': ambiguous_count,
-            'alternatives': alternatives,
-            'time_mismatch': time_mismatch,
-            'length_mismatch': length_mismatch,
-            'rate_mismatch': rate_mismatch,
-            'deal_mismatch': deal_mismatch,
-            'network_mismatch': network_mismatch,
-            'day_mismatch': day_mismatch,
-            'time_distance': time_distance,
-            'exact_time_match': exact_time_match,
-        }
 
     @api.model
     def _fuzzy_analyze_schedule(
@@ -1799,59 +1451,6 @@ class MvPostlogMatching(models.Model):
             'length_match': length_match,
             'schedule_length': schedule_length,
         }
-
-    @api.model
-    def _fuzzy_match_explanation(self, analysis, reason, ambiguous_count):
-        if not analysis:
-            return reason or _('No eligible sold schedule was found.')
-        parts = []
-        if analysis['network_match']:
-            parts.append(_('network matches'))
-        if analysis['deal_match']:
-            parts.append(_('deal matches'))
-        if analysis['rate_match']:
-            parts.append(_('rate matches'))
-        if analysis['day_match']:
-            parts.append(_('air day matches'))
-        if analysis['exact_time_match']:
-            parts.append(_('airtime is inside rotation'))
-        elif analysis['time_match']:
-            parts.append(
-                _('airtime is %(minutes)s minute(s) from rotation')
-                % {'minutes': analysis['time_distance'] or 0}
-            )
-        if analysis['length_match']:
-            parts.append(_('length matches'))
-        if ambiguous_count > 1:
-            parts.append(_('%(count)s schedules are tied') % {'count': ambiguous_count})
-        return '; '.join(parts) + (('. ' + reason) if reason else '')
-
-    @api.model
-    def _fuzzy_no_suggestion_reason(self, analyses):
-        if not analyses:
-            return _('No schedules found for deal number')
-        network_matches = [
-            analysis
-            for analysis in analyses
-            if analysis['network_match']
-        ]
-        if not network_matches:
-            return _('No network match')
-        rate_matches = [
-            analysis
-            for analysis in network_matches
-            if analysis['rate_match']
-        ]
-        if not rate_matches:
-            return _('No rate match')
-        day_matches = [
-            analysis
-            for analysis in rate_matches
-            if analysis['day_match']
-        ]
-        if not day_matches:
-            return _('No day match')
-        return _('No time match')
 
     @api.model
     @staticmethod

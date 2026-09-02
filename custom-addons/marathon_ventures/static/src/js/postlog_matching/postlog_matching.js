@@ -2,7 +2,7 @@
 
 import { registry } from "@web/core/registry";
 import { useService } from "@web/core/utils/hooks";
-import { Component, onWillStart, useState } from "@odoo/owl";
+import { Component, onWillStart, onWillUnmount, useState } from "@odoo/owl";
 
 export class MvPostlogMatching extends Component {
     static template = "marathon_ventures.MvPostlogMatching";
@@ -12,7 +12,11 @@ export class MvPostlogMatching extends Component {
         this.orm = useService("orm");
         this.action = useService("action");
         this.notification = useService("notification");
+        onWillUnmount(() => { this.isUnmounted = true; });
         this.requestId = 0;
+        // Set on unmount so the import poll below stops rather than writing to
+        // a dead component.
+        this.isUnmounted = false;
         this.state = useState({
             loaded: false,
             querying: false,
@@ -30,6 +34,8 @@ export class MvPostlogMatching extends Component {
             airDate: "",
             issueFilter: "",
             refreshing: false,
+            importJob: false,
+            drawerAnchor: 0,
             sortBy: "air_date",
             sortDirection: "asc",
             rows: [],
@@ -297,13 +303,131 @@ export class MvPostlogMatching extends Component {
      *  Stored matching does not self-heal, so this is how a Schedule corrected
      *  after import gets picked up. Unmatched-only, so it cannot undo an
      *  attachment someone made by hand. */
-    /** Open the Postlog upload wizard without leaving the workbench. Reloads on
-     *  close so a completed import shows up without a manual refresh. */
+    /** Open the Postlog upload wizard without leaving the workbench.
+     *
+     *  The wizard closes as soon as the job is QUEUED, not when it is done - the
+     *  import runs in the background and the cron polls every minute, so there
+     *  can be a minute of nothing before rows appear. Reloading on close simply
+     *  showed an empty table, which reads as a failed import. So we watch the
+     *  job instead and load when it finishes.
+     */
     async onImport() {
+        const latest = await this.orm.search("mv.postlog_import_job", [], {
+            limit: 1, order: "id desc",
+        });
+        const previousId = latest.length ? latest[0] : 0;
         await this.action.doAction(
             "marathon_ventures.action_open_postlog_upload_wizard",
-            { onClose: () => this._loadResults() },
+            // Braces on purpose: the callback must return undefined, not the
+            // poll promise. Odoo awaits whatever onClose returns before tearing
+            // the dialog down, so returning the promise left the wizard on
+            // screen - and unclosable - for the whole poll.
+            { onClose: () => { this._watchImportJob(previousId); } },
         );
+    }
+
+    /** Poll the job created by the wizard until it finishes, then load it.
+     *  `previousId` is the newest job from before the wizard opened, so a
+     *  cancelled wizard (which creates nothing) is a no-op. */
+    /** True for the whole life of a watched job - queued, running, and through
+     *  the reload that follows it. Keyed on the job's presence rather than its
+     *  state on purpose: state flips to "completed" before the new rows have
+     *  been fetched, and releasing the panel there would flash an empty table
+     *  with zeroed tab counts. _watchImportJob clears the job last. */
+    get importInFlight() {
+        return Boolean(this.state.importJob);
+    }
+
+    /** Drop the on-screen results while an import is in flight.
+     *
+     *  Also drops the selection: "select all matching" resolves server-side at
+     *  click time, so a selection made against the old view would silently
+     *  resolve against the new one.
+     */
+    clearResultsForImport() {
+        this.closeDrawer();
+        Object.assign(this.state, {
+            rows: [],
+            total: 0,
+            offset: 0,
+            page: 0,
+            pages: 0,
+            counts: {
+                all: 0, matched: 0, unmatched: 0, suggestions: 0, no_suggestion: 0,
+            },
+            selectedRows: {},
+            selectAllMatching: false,
+            excludedRows: {},
+        });
+    }
+
+    async _watchImportJob(previousId) {
+        const created = await this.orm.searchRead(
+            "mv.postlog_import_job", [["id", ">", previousId]], ["state"],
+            { limit: 1, order: "id desc" },
+        );
+        if (!created.length) {
+            return;                       // wizard cancelled - nothing queued
+        }
+        const jobId = created[0].id;
+        // Hide the previous view for the duration. The week an upload lands in
+        // is detected from the file, not chosen in the wizard, so there is no
+        // way to know whether the rows on screen are about to be replaced -
+        // and a table captioned "2184 rows" under a banner reading "Import
+        // running" invites reading the old upload as the new one's result.
+        this.clearResultsForImport();
+        const FIELDS = ["state", "total_row_count", "matched_count",
+                        "unmatched_count", "error_count", "failure_message",
+                        "program_id", "import_week"];
+        // The cron runs every minute, so the job can sit queued that long before
+        // it even starts. Wait well past that before giving up.
+        const deadline = Date.now() + 5 * 60 * 1000;
+        while (!this.isUnmounted && Date.now() < deadline) {
+            const [job] = await this.orm.read("mv.postlog_import_job", [jobId], FIELDS);
+            this.state.importJob = job;
+            if (job.state === "completed" || job.state === "failed") {
+                break;
+            }
+            await new Promise((resolve) => setTimeout(resolve, 3000));
+        }
+        if (this.isUnmounted) {
+            return;
+        }
+        const job = this.state.importJob;
+        if (job && job.state === "completed") {
+            this.notification.add(
+                `Import finished: ${job.total_row_count} row(s), ` +
+                `${job.matched_count} matched, ${job.unmatched_count} unmatched.`,
+                { type: "success" },
+            );
+            // Point the filters at what was just imported. Without this the
+            // page shows the new rows while the filter bar still reads "All
+            // Programs" with no week - and Refresh, which reads those filters,
+            // would run unscoped.
+            if (job.program_id) {
+                this.state.filters.programId = job.program_id[0];
+            }
+            if (job.import_week) {
+                this.state.filters.weekStart = job.import_week;
+            }
+            this.state.filters.importJobId = jobId;
+            await this._loadResults();
+        } else if (job && job.state === "failed") {
+            this.notification.add(job.failure_message || "The import failed.",
+                                  { type: "danger" });
+            // The view was cleared when the job was queued, so every way out of
+            // this watch has to put something back. Without this a failed or
+            // slow import left an empty table with zeroed tab counts and no
+            // explanation - which reads as "the week is gone".
+            await this._loadResults();
+        } else {
+            this.notification.add(
+                "The import is still running. Press View Postlog Data when it finishes.",
+                { type: "info" },
+            );
+            await this._loadResults();
+        }
+        this.state.importJob = false;
     }
 
     async onRefresh() {
@@ -364,8 +488,96 @@ export class MvPostlogMatching extends Component {
         }]);
     }
 
+    /** Re-check from inside the drawer, keeping your place.
+     *
+     *  The rhythm this supports: several rows share one bad Schedule, you fix
+     *  the Schedule in another tab, come back and want them gone so the next
+     *  arrow lands on a genuinely different problem - not another row blocked
+     *  by the thing you just fixed.
+     *
+     *  If the open row itself gets attached it drops out of the filtered list,
+     *  and whatever slides into its index is the next thing needing review, so
+     *  holding the index is exactly the right place to be.
+     */
+    async onDrawerRefresh() {
+        const openId = this.state.drawerRow?.id;
+        // Remember where this row sat before the list changes under us; the
+        // arrows step from here once the row itself has dropped out.
+        this.state.drawerAnchor = Math.max(this.drawerIndex, 0);
+        await this.onRefresh();
+        // Deliberately NOT rows[index]: the drawer follows the row you chose,
+        // not a position in a list that just changed. If your fix worked, the
+        // row is now Matched and you get to see that - swapping in a different
+        // row would hide the one answer you pressed the button for.
+        const fresh = openId
+            ? await this.orm.call("mv.spot_data", "fuzzy_match_row", [openId])
+            : false;
+        if (fresh) {
+            this.state.drawerRow = fresh;
+        } else {
+            this.closeDrawer();
+        }
+    }
+
+    /** Where the open row sits in the loaded page, or -1 if it is not there. */
+    get drawerIndex() {
+        if (!this.state.drawerRow) {
+            return -1;
+        }
+        return this.state.rows.findIndex((row) => row.id === this.state.drawerRow.id);
+    }
+
+    /** "3 of 12" - the page, not the whole result set, since that is what the
+     *  arrows can actually reach. */
+    get drawerPosition() {
+        const index = this.drawerIndex;
+        if (index < 0) {
+            // No longer in this list - say so rather than showing a position
+            // that belongs to some other row now.
+            return this.state.drawerRow ? "not in view" : "";
+        }
+        return `${index + 1} of ${this.state.rows.length}`;
+    }
+
+    /** True when the open row has left the filtered list - it was attached by a
+     *  Refresh and the tab no longer includes it. The arrows then step from the
+     *  anchor, i.e. the slot it used to occupy. */
+    get drawerDetached() {
+        return !!this.state.drawerRow && this.drawerIndex < 0;
+    }
+
+    get hasPrevRow() {
+        return this.drawerDetached
+            ? this.state.drawerAnchor > 0
+            : this.drawerIndex > 0;
+    }
+
+    get hasNextRow() {
+        if (this.drawerDetached) {
+            // rows[anchor] is whatever slid into this row's place: the next
+            // thing needing review.
+            return this.state.drawerAnchor < this.state.rows.length;
+        }
+        const index = this.drawerIndex;
+        return index >= 0 && index < this.state.rows.length - 1;
+    }
+
+    /** Step to the neighbouring row without closing the drawer. Bounded by the
+     *  loaded page: paging from inside the drawer would move the table under
+     *  the operator, which is more surprising than stopping at the edge. */
+    stepDrawer(delta) {
+        const from = this.drawerDetached
+            ? this.state.drawerAnchor - (delta > 0 ? 1 : 0)
+            : this.drawerIndex;
+        const next = this.state.rows[from + delta];
+        if (next) {
+            this.openDrawer(next);
+        }
+    }
+
     openDrawer(row) {
         this.state.drawerRow = row;
+        this.state.drawerAnchor = Math.max(this.state.rows.indexOf(row), 0);
         this.state.manualSchedule = "";
     }
     closeDrawer() { this.state.drawerRow = false; this.state.manualSchedule = ""; }
@@ -587,7 +799,13 @@ export class MvPostlogMatching extends Component {
             minimumFractionDigits: 2, maximumFractionDigits: 2,
         }) : "";
     }
-    statusBadge(row) { return `mv-fuzzy__status mv-fuzzy__status--${row.status}`; }
+    /** Two badges for two stored states. Not `--${row.status}`: that emitted a
+     *  third, red, No Suggestion badge for a split the Info column now makes. */
+    statusBadge(row) {
+        return row.status === "matched"
+            ? "mv-fuzzy__status mv-fuzzy__status--matched"
+            : "mv-fuzzy__status mv-postlog-status--unmatched";
+    }
     tabTitle() {
         return {
             all: "All",

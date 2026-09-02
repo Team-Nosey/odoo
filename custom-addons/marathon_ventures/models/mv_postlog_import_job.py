@@ -141,7 +141,35 @@ class MvPostlogImportJob(models.Model):
                 "notification_email": user_email,
             }
         )
+        job._trigger_cron()
         return job, True
+
+    def _trigger_cron(self):
+        """Ask the cron to run now instead of on its next tick.
+
+        The queue exists so the request returns immediately - a 20k-row bundle
+        would otherwise block an HTTP worker past its timeout. But the cron ticks
+        once a minute, so a job queued just after a tick waited nearly a full
+        minute before starting, for work that takes ~13 seconds. The operator
+        watched an empty screen for the difference.
+
+        Best effort: if the trigger fails the job simply starts on the next tick,
+        which is the behaviour we had before.
+        """
+        cron = self.env.ref(
+            "marathon_ventures.cron_mv_postlog_import_jobs",
+            raise_if_not_found=False,
+        )
+        if not cron:
+            return
+        try:
+            cron.sudo()._trigger()
+        except Exception:
+            _logger.exception(
+                "Postlog import job %s: cron trigger failed; the job stays "
+                "queued and will run on the next tick.",
+                self.ids,
+            )
 
     @api.model
     def _cron_process_postlog_import_jobs(self):

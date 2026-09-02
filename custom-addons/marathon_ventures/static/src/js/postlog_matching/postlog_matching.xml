@@ -35,27 +35,40 @@
                      t-on-change="onWeekChange" t-att-disabled="state.querying or state.mutating"/>
             </label>
             <div class="mv-fuzzy__filter-actions">
-              <button class="btn btn-primary" t-on-click="onFilter" t-att-disabled="state.querying or state.mutating">
+              <button class="btn btn-primary" t-on-click="onFilter" t-att-disabled="state.querying or state.mutating or importInFlight">
                 <i class="fa fa-filter me-1"/><t t-esc="state.querying ? 'Loading…' : 'View Postlog Data'"/>
               </button>
               <button class="btn btn-outline-secondary" t-on-click="onExport"
-                      t-att-disabled="state.exporting or state.querying or state.mutating or !state.hasFiltered">
+                      t-att-disabled="state.exporting or state.querying or state.mutating or !state.hasFiltered or importInFlight">
                 <i class="fa fa-download me-1"/><t t-esc="state.exporting ? 'Exporting…' : 'Export View'"/>
               </button>
-              <button class="btn btn-outline-secondary" t-on-click="onRefresh"
-                      t-att-disabled="state.refreshing or state.querying or state.mutating"
-                      title="Re-check unmatched rows against the current Schedules">
-                <i class="fa fa-refresh me-1" t-att-class="state.refreshing ? 'fa-spin' : ''"/><t t-esc="state.refreshing ? 'Re-checking…' : 'Refresh'"/>
-              </button>
-              <button class="btn btn-primary" t-on-click="onImport"
-                      t-att-disabled="state.querying or state.mutating">
+              <button class="btn btn-outline-primary" t-on-click="onImport"
+                      t-att-disabled="state.querying or state.mutating or importInFlight">
                 <i class="fa fa-upload me-1"/>Import
               </button>
             </div>
           </div>
         </section>
 
-        <section class="mv-fuzzy__results" t-if="state.hasFiltered">
+        <!-- The import is a background job: the wizard closes when it is queued,
+             and the cron can take a minute to pick it up. Without this the table
+             just sits empty and reads as a failed import. -->
+        <section class="mv-postlog-import-status" t-if="state.importJob">
+          <i class="fa fa-spinner fa-spin"/>
+          <span><strong t-esc="state.importJob.state === 'completed' ? 'Import finished — loading rows…' : 'Import running…'"/>
+            <t t-if="state.importJob.total_row_count"> <t t-esc="state.importJob.total_row_count"/> row(s)</t>
+            <span class="mv-postlog-import-status__state" t-esc="state.importJob.state"/>
+          </span>
+        </section>
+
+        <section class="mv-postlog-import-wait" t-if="importInFlight">
+          <i class="fa fa-hourglass-half"/>
+          <h2>Waiting for the import to finish</h2>
+          <p>The previous view is hidden so it cannot be mistaken for this
+             upload's result. Rows load automatically when the job completes.</p>
+        </section>
+
+        <section class="mv-fuzzy__results" t-if="state.hasFiltered and !importInFlight">
           <nav class="mv-fuzzy__tabs" aria-label="Postlog Data status">
             <button t-att-class="state.activeTab === 'all' ? 'active' : ''" t-on-click="() => this.setTab('all')">All <span t-esc="state.counts.all"/></button>
             <button t-att-class="state.activeTab === 'matched' ? 'active' : ''" t-on-click="() => this.setTab('matched')">Matched <span t-esc="state.counts.matched"/></button>
@@ -90,6 +103,16 @@
               <p t-else="">No rows in this view.</p>
             </div>
             <div class="mv-fuzzy__bulk-actions">
+              <!-- Refresh lives with the table, not the filter bar: it is what you
+                   reach for while looking at unmatched rows. Hidden on Matched,
+                   where it has nothing to act on. It needs no selection, so it sits
+                   ahead of the buttons that do. -->
+              <button class="btn btn-outline-secondary btn-sm" t-on-click="onRefresh"
+                      t-if="state.activeTab !== 'matched'"
+                      t-att-disabled="state.refreshing or state.querying or state.mutating"
+                      title="Re-check unmatched rows against the current Schedules">
+                <i class="fa fa-refresh me-1" t-att-class="state.refreshing ? 'fa-spin' : ''"/><t t-esc="state.refreshing ? 'Re-checking…' : 'Refresh'"/>
+              </button>
               <span t-if="selectedCount"><strong t-esc="selectedCount"/> selected</span>
               <button class="btn btn-success btn-sm" t-on-click="attachSuggested"
                       t-if="state.activeTab === 'all' or state.activeTab === 'unmatched' or state.activeTab === 'suggestions'"
@@ -164,7 +187,7 @@
           </nav>
         </section>
 
-        <section class="mv-fuzzy__welcome" t-if="!state.hasFiltered">
+        <section class="mv-fuzzy__welcome" t-if="!state.hasFiltered and !importInFlight">
           <i class="fa fa-table"/><h2>Choose a Postlog Data set to begin</h2><p>Your newest completed upload is selected automatically when available. All parameters remain editable.</p>
         </section>
       </main>
@@ -172,8 +195,27 @@
       <div class="mv-fuzzy__drawer-backdrop" t-if="state.drawerRow" t-on-click="closeDrawer"/>
       <aside class="mv-fuzzy__drawer" t-if="state.drawerRow">
         <header>
-          <div><span t-att-class="statusBadge(state.drawerRow)" t-esc="state.drawerRow.status_label"/><h2 t-esc="state.drawerRow.name"/></div>
-          <button class="btn btn-light btn-sm" t-on-click="closeDrawer"><i class="fa fa-times"/></button>
+          <div class="mv-postlog-drawer-title">
+            <h2 t-esc="state.drawerRow.name"/>
+            <span t-att-class="statusBadge(state.drawerRow)" t-esc="state.drawerRow.status_label"/>
+          </div>
+          <div class="mv-postlog-drawer-nav">
+            <button class="btn btn-light btn-sm" t-on-click="onDrawerRefresh"
+                    t-att-disabled="state.refreshing or state.querying or state.mutating"
+                    title="Re-check unmatched rows - fixed rows drop out and you keep your place">
+              <i class="fa fa-refresh" t-att-class="state.refreshing ? 'fa-spin' : ''"/>
+            </button>
+            <button class="btn btn-light btn-sm" t-att-disabled="!hasPrevRow"
+                    t-on-click="() => this.stepDrawer(-1)" title="Previous row">
+              <i class="fa fa-chevron-up"/>
+            </button>
+            <span class="mv-postlog-drawer-nav__position" t-esc="drawerPosition"/>
+            <button class="btn btn-light btn-sm" t-att-disabled="!hasNextRow"
+                    t-on-click="() => this.stepDrawer(1)" title="Next row">
+              <i class="fa fa-chevron-down"/>
+            </button>
+            <button class="btn btn-light btn-sm" t-on-click="closeDrawer" title="Close"><i class="fa fa-times"/></button>
+          </div>
         </header>
         <div class="mv-fuzzy__drawer-body">
           <!-- Two columns, three fields each, to halve the height. The grid flows
@@ -213,21 +255,25 @@
               <table class="mv-postlog-sched__table">
                 <thead>
                   <tr>
-                    <th>ID &amp; Status</th>
+                    <th class="mv-postlog-sched__col-id">ID &amp; Status</th>
                     <th>Time &amp; Days</th>
                     <th>Length / Rate / Deal Number</th>
-                    <th>Differences</th>
+                    <th class="mv-postlog-sched__col-diff">Differences</th>
                     <th class="mv-postlog-sched__col-action">Action</th>
                   </tr>
                 </thead>
                 <tbody>
                   <t t-foreach="candidates()" t-as="c" t-key="c.schedule.id">
                     <tr class="mv-postlog-sched__row" t-att-class="c.suggested ? 'mv-postlog-sched__row--suggested' : ''">
-                      <td>
-                        <span class="mv-postlog-sched__rank" t-att-class="c.suggested ? 'mv-postlog-sched__rank--first' : ''" t-esc="c_index + 1"/>
-                        <a class="mv-postlog-sched__id" target="_blank" rel="noopener"
-                           t-att-href="scheduleOpenUrl(c.schedule)" t-on-click.stop="() => {}" t-esc="c.schedule.name"/>
-                        <span class="mv-fuzzy__quality mv-fuzzy__quality--suggested" t-if="c.suggested">Suggested</span>
+                      <td class="mv-postlog-sched__col-id">
+                        <div>
+                          <span class="mv-postlog-sched__rank" t-att-class="c.suggested ? 'mv-postlog-sched__rank--first' : ''" t-esc="c_index + 1"/>
+                          <a class="mv-postlog-sched__id" target="_blank" rel="noopener"
+                             t-att-href="scheduleOpenUrl(c.schedule)" t-on-click.stop="() => {}" t-esc="c.schedule.name"/>
+                        </div>
+                        <div class="mv-postlog-sched__status" t-if="c.suggested">
+                          <span class="mv-fuzzy__quality mv-fuzzy__quality--suggested">Suggested</span>
+                        </div>
                       </td>
                       <td>
                         <div class="mv-postlog-sched__time" t-att-class="c.time_mismatch ? 'mv-postlog-sched__diff' : ''"
@@ -241,7 +287,7 @@
                           class="mv-postlog-sched__delta" t-if="rateDelta(c.schedule)" t-esc="rateDelta(c.schedule)"/></div>
                         <div><i class="fa fa-file-text-o"/> Deal <t t-esc="c.schedule.deal_number"/></div>
                       </td>
-                      <td>
+                      <td class="mv-postlog-sched__col-diff">
                         <t t-set="diff" t-value="differenceSummary(c)"/>
                         <span class="mv-postlog-sched__match" t-att-class="diff.count ? 'mv-postlog-sched__match--warn' : 'mv-postlog-sched__match--ok'">
                           <i t-att-class="diff.count ? 'fa fa-exclamation-circle' : 'fa fa-check-circle'"/>

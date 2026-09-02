@@ -60,11 +60,16 @@ class TestPostlogWorkbenchUI(HttpCase):
             'status': 'aired',
             'import_match_status': 'unmatched',
         })
+        # A second row, so the drawer's prev/next arrows have somewhere to go.
+        cls.postlog_second = cls.postlog.copy({
+            'air_time': '10:30:00',
+            'product': 'UI Fixture Product Two',
+        })
         # The workbench reads stored matching now, so the fixture has to carry
-        # it. attach=False keeps the row in the suggestion queue, which is what
+        # it. attach=False keeps the rows in the suggestion queue, which is what
         # the tour drives.
         cls.env['mv.spot_data']._postlog_store_matching(
-            cls.postlog, cls.program, cls.week, attach=False,
+            cls.postlog | cls.postlog_second, cls.program, cls.week, attach=False,
         )
         cls.action = cls.env.ref('marathon_ventures.action_mv_postlog_workbench')
 
