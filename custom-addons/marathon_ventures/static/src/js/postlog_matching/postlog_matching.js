@@ -29,7 +29,8 @@ export class MvPostlogMatching extends Component {
             timeBufferMinutes: 120,
             filters: { programId: false, weekStart: "", importJobId: false },
             activeTab: "all",
-            counts: { all: 0, matched: 0, unmatched: 0, suggestions: 0, no_suggestion: 0 },
+            counts: { all: 0, matched: 0, unmatched: 0, suggestions: 0,
+                      no_suggestion: 0, removed: 0 },
             searchTerm: "",
             airDate: "",
             issueFilter: "",
@@ -279,6 +280,35 @@ export class MvPostlogMatching extends Component {
         } finally { this.state.mutating = false; }
     }
 
+    /** Remove rows from reconciliation, or restore them.
+     *
+     *  Removing clears the attached schedule, which the confirmation states
+     *  before it happens: a duplicate that keeps its attachment still
+     *  reconciles, so the clear is the point rather than a side effect.
+     */
+    async setRemoved(removed, row = false) {
+        const count = row ? 1 : this.selectedCount;
+        if (!count) {
+            this.notification.add("Select at least one Postlog row.", { type: "info" });
+            return;
+        }
+        const question = removed
+            ? `Remove ${count} row(s)? Any attached Schedule ID will be cleared.`
+            : `Restore ${count} row(s)? Matching will be re-run.`;
+        if (!window.confirm(question)) return;
+        this.state.mutating = true;
+        try {
+            const result = await this.orm.call(
+                "mv.spot_data", "fuzzy_workbench_bulk_action",
+                this._bulkArgs(removed ? "remove" : "unremove", row)
+            );
+            this.notification.add(result.message, { type: "success" });
+            this._resetSelection();
+            this.state.drawerRow = false;
+            await this._loadResults();
+        } finally { this.state.mutating = false; }
+    }
+
     async deleteSelected(row = false) {
         const count = row ? 1 : this.selectedCount;
         if (!count) {
@@ -353,7 +383,8 @@ export class MvPostlogMatching extends Component {
             page: 0,
             pages: 0,
             counts: {
-                all: 0, matched: 0, unmatched: 0, suggestions: 0, no_suggestion: 0,
+                all: 0, matched: 0, unmatched: 0, suggestions: 0,
+                no_suggestion: 0, removed: 0,
             },
             selectedRows: {},
             selectAllMatching: false,
@@ -802,9 +833,13 @@ export class MvPostlogMatching extends Component {
     /** Two badges for two stored states. Not `--${row.status}`: that emitted a
      *  third, red, No Suggestion badge for a split the Info column now makes. */
     statusBadge(row) {
-        return row.status === "matched"
-            ? "mv-fuzzy__status mv-fuzzy__status--matched"
-            : "mv-fuzzy__status mv-postlog-status--unmatched";
+        if (row.status === "matched") {
+            return "mv-fuzzy__status mv-fuzzy__status--matched";
+        }
+        if (row.status === "removed") {
+            return "mv-fuzzy__status mv-fuzzy__status--removed";
+        }
+        return "mv-fuzzy__status mv-postlog-status--unmatched";
     }
     tabTitle() {
         return {
@@ -813,6 +848,7 @@ export class MvPostlogMatching extends Component {
             unmatched: "Unmatched",
             suggestions: "Suggestions",
             no_suggestion: "No Suggestion",
+            removed: "Removed",
         }[this.state.activeTab] || "All";
     }
 

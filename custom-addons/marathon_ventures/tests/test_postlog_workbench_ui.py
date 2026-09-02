@@ -60,10 +60,28 @@ class TestPostlogWorkbenchUI(HttpCase):
             'status': 'aired',
             'import_match_status': 'unmatched',
         })
-        # A second row, so the drawer's prev/next arrows have somewhere to go.
-        cls.postlog_second = cls.postlog.copy({
+        # A second row, so the drawer's prev/next arrows have somewhere to go,
+        # and so the tour can watch a clean row and a fuzzy one diverge.
+        #
+        # Built with create() rather than copy(): network_deal_number and product
+        # are stored computes whose compute is still a stub returning False, and
+        # both are copy=False - so a copied row silently lost its deal number and
+        # came back as "Missing deal number" instead of a fuzzy suggestion.
+        cls.postlog_second = cls.env['mv.spot_data'].create({
+            'import_program': cls.program.id,
+            'import_week_value': cls.week,
+            'broadcast_network': 'UI Test Network',
+            'network_deal_number': 'UIT-1',
+            'air_date': cls.week,
+            # 30 minutes past the 9a-10a rotation: inside the fuzzy buffer, so
+            # never a clean match, so it stays reviewable however often the
+            # matcher runs.
             'air_time': '10:30:00',
+            'length': 'v_30',
+            'spot_rate': 100.0,
             'product': 'UI Fixture Product Two',
+            'status': 'aired',
+            'import_match_status': 'unmatched',
         })
         # The workbench reads stored matching now, so the fixture has to carry
         # it. attach=False keeps the rows in the suggestion queue, which is what
@@ -77,9 +95,10 @@ class TestPostlogWorkbenchUI(HttpCase):
         """Mount the client action and drive it end to end in a real browser.
 
         Covers what the Python tests cannot: that the OWL template compiles and
-        mounts, that the dropped Version filter and Removed tab really are gone
-        from the DOM, that the filters fire a real RPC, and that a matched row
-        with its deal number and suggested schedule reaches the page.
+        mounts, that the dropped Version filter and Overruns tab really are gone
+        from the DOM, that the filters fire a real RPC, that a matched row with
+        its deal number and suggested schedule reaches the page, and that the
+        background-import and remove/restore flows behave in a real browser.
 
         Fails on any uncaught JavaScript error. Skipped automatically when no
         Chrome/Chromium binary is on PATH.

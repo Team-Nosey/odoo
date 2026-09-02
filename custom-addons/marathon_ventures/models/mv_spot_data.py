@@ -86,12 +86,25 @@ class MvSpotData(models.Model):
     time_period = fields.Char(string='Time Period', size=255)  # SF: Time_Period__c
     x800 = fields.Char(string='800 #', size=100)  # SF: X800__c
 
+    # Duplicate or bonus spots that must not reconcile: airings that are in the
+    # log but should not be counted against a deal. Set from the Postlog
+    # Workbench, and removing a spot always clears its attached Schedule - a
+    # duplicate holding an attachment would double-count.
+    #
+    # A property of the spot, not of the workbench, which is why it sits here
+    # and not in the workbench block below: reporting has to be able to filter
+    # these out, and none of that code goes through the workbench. No SF
+    # counterpart on Spot Data (prelog's is `Removed__c` on its own object).
+    removed = fields.Boolean(string='Removed', index=True)
+
     # === Postlog Workbench fields (mirrors mv.prelog_data) ===
     # Plain indexed fields written by the Postlog import. Deliberately separate
     # from the generated `program` Char (which holds the show name, e.g.
     # "NEW DETECTIVES") and from the stubbed `spot_week` compute.
-    # NOTE: there is no `version` / `removed` here - a postlog is one upload per
-    # week of what actually aired, so neither concept applies.
+    # NOTE: there is no `version` here - a postlog is one upload per week of
+    # what actually aired, so the concept does not apply. `removed` does apply,
+    # but describes the spot rather than the workbench, so it is declared with
+    # the spot's own fields above.
 
     import_job = fields.Many2one(string='Import Job', comodel_name='mv.postlog_import_job', ondelete='set null', index=True)
     import_program = fields.Many2one(string='Import Program', comodel_name='mv.programs', ondelete='restrict', index=True)

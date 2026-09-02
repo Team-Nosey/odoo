@@ -25,12 +25,15 @@ registry.category("web_tour.tours").add("postlog_workbench_tour", {
             },
         },
         {
-            content: "the dropped Removed tab is not rendered",
+            // Overruns stays dropped - postlog has no unit-overrun concept. This
+            // step used to assert Removed was absent too, before duplicate and
+            // bonus spots needed taking out of reconciliation.
+            content: "the dropped Overruns tab is not rendered",
             trigger: ".mv-fuzzy",
             run() {
                 const tabs = document.querySelector(".mv-fuzzy__tabs");
-                if (tabs && /Removed/.test(tabs.textContent)) {
-                    throw new Error("the Removed tab is still rendered");
+                if (tabs && /Overrun/.test(tabs.textContent)) {
+                    throw new Error("the Overruns tab is still rendered");
                 }
             },
         },
@@ -76,6 +79,24 @@ registry.category("web_tour.tours").add("postlog_workbench_tour", {
         {
             content: "the deal number rendered",
             trigger: ".mv-fuzzy:contains('UIT-1')",
+        },
+        {
+            // The fixture rows air at 09:30:00 and 10:30:00. Standard time is
+            // what the uploaded files carry, so it is what the column shows.
+            content: "air time reads as standard time, not 24-hour",
+            trigger: ".mv-fuzzy__table tbody:contains('09:30:00 AM')",
+        },
+        {
+            content: "and 24-hour is nowhere in the column",
+            trigger: ".mv-fuzzy__table",
+            run() {
+                const cells = [...document.querySelectorAll(".mv-fuzzy__table tbody tr")]
+                    .map((tr) => tr.children[5]?.textContent || "");
+                const military = cells.filter((t) => /·\s*(1[3-9]|2[0-3]):/.test(t));
+                if (military.length) {
+                    throw new Error(`24-hour air times still rendered: ${military}`);
+                }
+            },
         },
         {
             // The Schedule column shows attachments only, so an unmatched row
@@ -216,6 +237,92 @@ registry.category("web_tour.tours").add("postlog_workbench_tour", {
             trigger: ".mv-postlog-drawer-nav button[title='Close']",
             run: "click",
         },
+        // ---- remove / restore ----------------------------------------------
+        {
+            // setRemoved goes through window.confirm, which a headless browser
+            // cannot click. Stubbed to accept, but recording what it was asked
+            // - the wording is the whole safeguard, so the tour checks it.
+            content: "accept confirmations, and remember what they said",
+            trigger: ".mv-fuzzy__table",
+            run() {
+                window.__tourConfirms = [];
+                window.confirm = (message) => {
+                    window.__tourConfirms.push(message);
+                    return true;
+                };
+            },
+        },
+        {
+            content: "select every row on the page",
+            trigger: ".mv-fuzzy__table thead input[type=checkbox]",
+            run: "click",
+        },
+        {
+            content: "remove them from reconciliation",
+            trigger: ".mv-fuzzy__bulk-actions button:contains('Remove')",
+            run: "click",
+        },
+        {
+            content: "the confirmation warned that the schedule would be cleared",
+            trigger: ".mv-fuzzy__tabs",
+            run() {
+                const asked = window.__tourConfirms || [];
+                if (!asked.some((m) => m.includes("Schedule ID will be cleared"))) {
+                    throw new Error(
+                        `Remove did not warn about clearing the schedule: ${JSON.stringify(asked)}`
+                    );
+                }
+            },
+        },
+        {
+            content: "they left All and landed in Removed",
+            trigger: ".mv-fuzzy__tabs button:contains('Removed') span:contains('2')",
+        },
+        {
+            content: "All is empty now",
+            trigger: ".mv-fuzzy__tabs button:contains('All') span:contains('0')",
+        },
+        {
+            content: "open the Removed tab",
+            trigger: ".mv-fuzzy__tabs button:contains('Removed')",
+            run: "click",
+        },
+        {
+            content: "and the badge says Removed",
+            trigger: ".mv-fuzzy__table .mv-fuzzy__status--removed:contains('Removed')",
+        },
+        {
+            content: "Remove is not offered here; Restore is",
+            trigger: ".mv-fuzzy__bulk-actions button:contains('Restore')",
+        },
+        {
+            content: "select them again",
+            trigger: ".mv-fuzzy__table thead input[type=checkbox]",
+            run: "click",
+        },
+        {
+            content: "restore them",
+            trigger: ".mv-fuzzy__bulk-actions button:contains('Restore')",
+            run: "click",
+        },
+        {
+            content: "Removed is empty again",
+            trigger: ".mv-fuzzy__tabs button:contains('Removed') span:contains('0')",
+        },
+        {
+            // Restore re-runs the matcher with attach=True, and the two fixture
+            // rows split exactly on the rule: the first is clean on all four
+            // checks and comes back attached, the second aired 30 minutes past
+            // its rotation - inside the fuzzy buffer, so not clean - and comes
+            // back as a suggestion for review instead.
+            content: "restoring re-attached the clean row",
+            trigger: ".mv-fuzzy__tabs button:contains('Matched') span:contains('1')",
+        },
+        {
+            content: "and left the 30-minutes-off row as a suggestion",
+            trigger: ".mv-fuzzy__tabs button:contains('Suggestions') span:contains('1')",
+        },
+
         {
             content: "open the upload wizard",
             trigger: ".mv-fuzzy__filter-actions button:contains('Import')",

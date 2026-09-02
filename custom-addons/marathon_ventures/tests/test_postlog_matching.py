@@ -446,6 +446,201 @@ class TestPostlogMatching(TransactionCase):
 
         self.assertFalse(self.Postlog.fuzzy_match_row(0))
 
+    # ------------------------------------------------------------------
+    # Remove / restore: duplicate and bonus spots that must not reconcile
+    # ------------------------------------------------------------------
+
+    def test_removing_a_matched_row_clears_its_attachment(self):
+        """The clear is the point, not a side effect.
+
+        A duplicate that keeps its schedule still reconciles against the deal,
+        which is the one thing removing it is meant to prevent.
+        """
+        postlog = self._create_postlog(
+            schedule=self.schedule.id, import_match_status='matched',
+        )
+        result = self.Postlog.fuzzy_match_set_removed(
+            [postlog.id], True, self.program.id, self.week.isoformat(),
+        )
+        self.assertEqual(result['updated'], 1)
+        self.assertTrue(postlog.removed)
+        self.assertFalse(postlog.schedule)
+        self.assertEqual(postlog.import_match_status, 'unmatched')
+        # A removed row makes no claim about matching.
+        self.assertFalse(postlog.suggested_schedule)
+        self.assertFalse(postlog.possible_schedules)
+        self.assertFalse(postlog.info)
+        self.assertIn('Cleared Schedule', postlog.import_match_detail)
+
+    def test_a_removed_row_leaves_every_other_tab(self):
+        """Removed is not a kind of unmatched - it is out of scope.
+
+        Both counts drop, which is what makes the Removed count mean something.
+        """
+        keep = self._create_postlog()
+        drop = self._create_postlog(
+            schedule=self.schedule.id, import_match_status='matched',
+        )
+        before = self._search()['counts']
+        self.assertEqual(before['all'], 2)
+        self.assertEqual(before['matched'], 1)
+
+        self.Postlog.fuzzy_match_set_removed(
+            [drop.id], True, self.program.id, self.week.isoformat(),
+        )
+        after = self._search()['counts']
+        self.assertEqual(after['all'], 1)
+        self.assertEqual(after['matched'], 0)
+        self.assertEqual(after['removed'], 1)
+        self.assertEqual([r['id'] for r in self._search()['rows']], [keep.id])
+
+        removed_tab = self._search(status='removed')
+        self.assertEqual([r['id'] for r in removed_tab['rows']], [drop.id])
+        self.assertEqual(removed_tab['rows'][0]['status'], 'removed')
+        self.assertEqual(removed_tab['rows'][0]['status_label'], 'Removed')
+
+    def test_restoring_reattaches_an_exact_match(self):
+        postlog = self._create_postlog(
+            schedule=self.schedule.id, import_match_status='matched',
+        )
+        self.Postlog.fuzzy_match_set_removed(
+            [postlog.id], True, self.program.id, self.week.isoformat(),
+        )
+        self.Postlog.fuzzy_match_set_removed(
+            [postlog.id], False, self.program.id, self.week.isoformat(),
+        )
+        self.assertFalse(postlog.removed)
+        self.assertEqual(postlog.schedule, self.schedule)
+        self.assertEqual(postlog.import_match_status, 'matched')
+        self.assertIn('matching re-run', postlog.import_match_detail)
+
+    def test_restoring_a_fuzzy_row_comes_back_as_a_suggestion(self):
+        """A spot outside its rotation must not re-attach on restore.
+
+        The bar is the import's: clean on all four checks. 30 minutes past the
+        rotation is inside the fuzzy buffer, which is not clean.
+        """
+        postlog = self._create_postlog(air_time='10:30:00')
+        self.assertFalse(postlog.schedule)
+        self.Postlog.fuzzy_match_set_removed(
+            [postlog.id], True, self.program.id, self.week.isoformat(),
+        )
+        self.Postlog.fuzzy_match_set_removed(
+            [postlog.id], False, self.program.id, self.week.isoformat(),
+        )
+        self.assertFalse(postlog.removed)
+        self.assertFalse(postlog.schedule)
+        self.assertEqual(postlog.suggested_schedule, self.schedule)
+        row = self._search(status='suggestions')['rows'][0]
+        self.assertEqual(row['id'], postlog.id)
+
+    def test_refresh_does_not_resurrect_a_removed_row(self):
+        """Refresh re-checks unmatched rows, and a removed row is unmatched.
+
+        Without the scope exclusion it would hand suggestions back to spots
+        somebody deliberately took out of reconciliation.
+        """
+        postlog = self._create_postlog()
+        self.Postlog.fuzzy_match_set_removed(
+            [postlog.id], True, self.program.id, self.week.isoformat(),
+        )
+        result = self.Postlog.fuzzy_match_refresh(
+            self.program.id, self.week.isoformat(),
+        )
+        self.assertEqual(result['checked'], 0)
+        self.assertFalse(postlog.suggested_schedule)
+        self.assertFalse(postlog.info)
+        self.assertTrue(postlog.removed)
+
+    def test_bulk_remove_and_restore_span_the_whole_filter(self):
+        postlogs = self.Postlog.browse()
+        for _index in range(3):
+            postlogs |= self._create_postlog()
+        removed = self.Postlog.fuzzy_workbench_bulk_action(
+            'remove',
+            {'all_matching': True, 'ids': [], 'excluded_ids': []},
+            self.program.id, self.week.isoformat(),
+        )
+        self.assertEqual(removed['updated'], 3)
+        self.assertEqual(self._search()['counts']['removed'], 3)
+
+        restored = self.Postlog.fuzzy_workbench_bulk_action(
+            'unremove',
+            {'all_matching': True, 'ids': [], 'excluded_ids': []},
+            self.program.id, self.week.isoformat(), status='removed',
+        )
+        self.assertEqual(restored['updated'], 3)
+        self.assertEqual(self._search()['counts']['removed'], 0)
+        self.assertEqual(self._search()['counts']['matched'], 3)
+
+    def test_export_writes_standard_time(self):
+        """The export reads the way the screen does, and the way the file did.
+
+        Midnight and noon are where 12-hour clocks go wrong, so both are
+        asserted rather than a mid-afternoon time that cannot distinguish them.
+        """
+        self.assertEqual(
+            self.Postlog._postlog_format_air_time('00:00:00'), '12:00:00 AM')
+        self.assertEqual(
+            self.Postlog._postlog_format_air_time('12:00:00'), '12:00:00 PM')
+        self.assertEqual(
+            self.Postlog._postlog_format_air_time('23:52:24'), '11:52:24 PM')
+        self.assertEqual(
+            self.Postlog._postlog_format_air_time('09:30:00'), '09:30:00 AM')
+        # unparseable input survives rather than vanishing
+        self.assertEqual(self.Postlog._postlog_format_air_time('garbage'), 'garbage')
+        self.assertEqual(self.Postlog._postlog_format_air_time(False), '')
+
+        self._create_postlog(air_time='23:52:24')
+        content = self.Postlog.fuzzy_workbench_export_csv(
+            self.program.id, self.week.isoformat(), status='all',
+        )['content']
+        self.assertIn('11:52:24 PM', content)
+        self.assertNotIn('23:52:24', content)
+
+    def test_export_excludes_removed_rows_unless_you_ask_for_them(self):
+        keep = self._create_postlog()
+        drop = self._create_postlog()
+        self.Postlog.fuzzy_match_set_removed(
+            [drop.id], True, self.program.id, self.week.isoformat(),
+        )
+        live = self.Postlog.fuzzy_workbench_export_csv(
+            self.program.id, self.week.isoformat(), status='all',
+        )
+        self.assertIn(keep.name, live['content'])
+        self.assertNotIn(drop.name, live['content'])
+
+        only_removed = self.Postlog.fuzzy_workbench_export_csv(
+            self.program.id, self.week.isoformat(), status='removed',
+        )
+        self.assertIn(drop.name, only_removed['content'])
+        self.assertNotIn(keep.name, only_removed['content'])
+
+    def test_restoring_a_mixed_selection_splits_correctly(self):
+        """Mirrors the tour: a clean row and a 30-minutes-off row, together.
+
+        Restored as one recordset, so this also proves the matcher's grouping
+        does not let one row's attachment starve the other's suggestions.
+        """
+        clean = self._create_postlog()
+        fuzzy = self._create_postlog(air_time='10:30:00')
+        both = clean | fuzzy
+        self.Postlog.fuzzy_match_set_removed(
+            both.ids, True, self.program.id, self.week.isoformat(),
+        )
+        self.Postlog.fuzzy_match_set_removed(
+            both.ids, False, self.program.id, self.week.isoformat(),
+        )
+        self.assertEqual(clean.schedule, self.schedule)
+        self.assertFalse(fuzzy.schedule)
+        self.assertEqual(
+            fuzzy.suggested_schedule, self.schedule,
+            'restoring together must not starve the fuzzy row of candidates',
+        )
+        counts = self._search()['counts']
+        self.assertEqual(counts['matched'], 1)
+        self.assertEqual(counts['suggestions'], 1)
+
     def test_the_status_badge_reports_the_two_stored_codes(self):
         """The badge says what is stored: Matched or Unmatched.
 
@@ -549,16 +744,19 @@ class TestPostlogMatching(TransactionCase):
         self.assertEqual(row['suggested']['id'], overnight.id)
         self.assertEqual(row['match_quality'], 'exact')
 
-    def test_no_version_or_removed_surface(self):
+    def test_no_version_surface(self):
+        """A postlog is one upload per week, so `version` does not apply.
+
+        `removed` does, and this test used to assert its absence - see the
+        remove/restore tests above.
+        """
         self._create_postlog()
-        counts = self._search()['counts']
-        self.assertNotIn('removed', counts)
         self.assertEqual(
-            set(counts), {'all', 'matched', 'unmatched', 'suggestions', 'no_suggestion'},
+            set(self._search()['counts']),
+            {'all', 'matched', 'unmatched', 'suggestions', 'no_suggestion',
+             'removed'},
         )
-        options = self.Postlog.fuzzy_match_get_options()
-        self.assertNotIn('versions', options)
-        self.assertFalse(hasattr(self.Postlog, 'fuzzy_match_set_removed'))
+        self.assertNotIn('versions', self.Postlog.fuzzy_match_get_options())
 
     # ------------------------------------------------------------------
     # Filters, tabs, sorting, export
@@ -643,16 +841,15 @@ class TestPostlogMatching(TransactionCase):
         self.assertEqual(good.schedule, self.schedule)
         self.assertFalse(bad.schedule)
 
-    def test_bulk_action_rejects_dropped_remove_verbs(self):
-        """remove/unremove no longer exist and must not fall through to delete."""
+    def test_bulk_action_rejects_an_unknown_verb(self):
+        """An unrecognised action must not fall through to delete."""
         postlog = self._create_postlog()
-        for verb in ('remove', 'unremove'):
-            with self.assertRaises(UserError):
-                self.Postlog.fuzzy_workbench_bulk_action(
-                    verb,
-                    {'all_matching': False, 'ids': [postlog.id], 'excluded_ids': []},
-                    self.program.id, self.week.isoformat(),
-                )
+        with self.assertRaises(UserError):
+            self.Postlog.fuzzy_workbench_bulk_action(
+                'obliterate',
+                {'all_matching': False, 'ids': [postlog.id], 'excluded_ids': []},
+                self.program.id, self.week.isoformat(),
+            )
         self.assertTrue(postlog.exists())
 
     def test_bulk_delete_removes_rows_permanently(self):

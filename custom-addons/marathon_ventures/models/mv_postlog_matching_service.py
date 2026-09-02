@@ -121,6 +121,7 @@ class MvPostlogMatching(models.Model):
             selected_week,
             unmatched_only=False,
             import_job_id=import_job_id,
+            include_removed=status == 'removed',
         )
         # Counts come from one grouped query over the week; the page comes from
         # a filtered, ordered, LIMITed query. Nothing is matched here - the
@@ -376,7 +377,7 @@ class MvPostlogMatching(models.Model):
         """Apply a Workbench action to explicit rows or every filtered row."""
         self._fuzzy_check_access()
         action_name = (action_name or '').strip().lower()
-        if action_name not in {'attach', 'delete'}:
+        if action_name not in {'attach', 'remove', 'unremove', 'delete'}:
             raise UserError(_('Unknown Postlog Workbench bulk action.'))
 
         postlogs, rows = self._fuzzy_resolve_workbench_selection(
@@ -436,6 +437,12 @@ class MvPostlogMatching(models.Model):
                 ) % {'count': result['skipped']}
             return result
 
+        if action_name in {'remove', 'unremove'}:
+            return self._postlog_set_removed_records(
+                postlogs,
+                action_name == 'remove',
+            )
+
         deleted = len(postlogs)
         postlogs.unlink()
         return {
@@ -491,6 +498,102 @@ class MvPostlogMatching(models.Model):
         return {
             'updated': detached,
             'message': _('%(count)s schedule(s) detached.') % {'count': detached},
+        }
+
+    @api.model
+    def fuzzy_match_set_removed(
+        self,
+        postlog_ids,
+        removed,
+        program_id=False,
+        week_start=False,
+        import_job_id=False,
+    ):
+        """Remove rows from reconciliation, or bring them back.
+
+        Removal is for duplicate and bonus airings: spots that are in the log
+        but must not count against a deal.
+        """
+        self._fuzzy_check_access()
+        postlogs = self._fuzzy_validate_selected_postlogs(
+            postlog_ids,
+            program_id,
+            week_start,
+            import_job_id,
+            # Unremove operates on rows that are, by definition, removed.
+            include_removed=True,
+        )
+        return self._postlog_set_removed_records(postlogs, bool(removed))
+
+    @api.model
+    def _postlog_set_removed_records(self, postlogs, removed):
+        """Remove or restore, for both the explicit and all-matching paths.
+
+        Removing always clears the attached Schedule. A duplicate that keeps its
+        attachment still reconciles against the deal, which is the one thing
+        removing it is meant to prevent - so the clear is part of the operation,
+        not a side effect, and the confirmation says so before it happens.
+
+        Restoring re-runs the matcher rather than restoring what was cleared:
+        the schedule that was right when the row was removed may not be right
+        now, and re-deriving is the only answer that cannot be stale.
+        """
+        now = fields.Datetime.now()
+        user_name = self.env.user.display_name
+        restored = self.browse()
+
+        for postlog in postlogs:
+            if removed:
+                line = _(
+                    'Removed from Postlog Workbench by %(user)s on %(date)s.'
+                ) % {'user': user_name, 'date': fields.Datetime.to_string(now)}
+                if postlog.schedule:
+                    line += ' ' + _('Cleared Schedule %(schedule)s.') % {
+                        'schedule': postlog.schedule.display_name,
+                    }
+                postlog.write({
+                    'removed': True,
+                    'schedule': False,
+                    'import_match_status': 'unmatched',
+                    # A removed row makes no claim about matching: no
+                    # suggestion, no candidates, no flags, no Info. The Status
+                    # badge says Removed and that is the whole story.
+                    'suggested_schedule': False,
+                    'possible_schedules': False,
+                    'match_flags': False,
+                    'info': False,
+                    'import_match_detail': '\n'.join(
+                        part for part in (postlog.import_match_detail, line) if part
+                    ),
+                })
+            else:
+                line = _(
+                    'Restored to the Postlog Workbench by %(user)s on %(date)s; '
+                    'matching re-run.'
+                ) % {'user': user_name, 'date': fields.Datetime.to_string(now)}
+                postlog.write({
+                    'removed': False,
+                    'import_match_detail': '\n'.join(
+                        part for part in (postlog.import_match_detail, line) if part
+                    ),
+                })
+                restored |= postlog
+
+        if restored:
+            # attach=True, so a clean exact match re-attaches on the spot, a
+            # spot outside its rotation comes back as a suggestion, and one with
+            # no candidates lands back in the queue with a reason. Passed as one
+            # recordset: the matcher groups by each row's own program and week,
+            # so a mixed selection costs one candidate query per group rather
+            # than one per row.
+            self._postlog_store_matching(restored, False, False, attach=True)
+
+        return {
+            'updated': len(postlogs),
+            'message': _('%(count)s Postlog row(s) %(action)s.') % {
+                'count': len(postlogs),
+                'action': _('removed') if removed else _('restored'),
+            },
         }
 
     @api.model
@@ -603,6 +706,7 @@ class MvPostlogMatching(models.Model):
                     selected_week,
                     unmatched_only=False,
                     import_job_id=import_job_id,
+                    include_removed=status == 'removed',
                 ),
                 status,
                 issue_filter,
@@ -624,7 +728,8 @@ class MvPostlogMatching(models.Model):
             schedule = row.get('attached') or row.get('suggested') or {}
             writer.writerow(self._fuzzy_csv_row([
                 row['name'], row['status_label'], row['match_quality_label'],
-                row['network'], row['air_date'], row['air_time'], row['length'],
+                row['network'], row['air_date'],
+                self._postlog_format_air_time(row['air_time']), row['length'],
                 row['rate'], row['week'], row['deal_number'],
                 row['advertiser_product'], schedule.get('name', ''), row['info'],
             ]))
@@ -716,8 +821,17 @@ class MvPostlogMatching(models.Model):
         selected_week,
         unmatched_only=True,
         import_job_id=False,
+        include_removed=False,
     ):
+        """The base scope for every workbench read.
+
+        Removed rows are out of scope by default. They are duplicate or bonus
+        airings that must not reconcile, so they do not belong in All, Matched
+        or Unmatched - only in the Removed tab, which asks for them explicitly.
+        """
         domain = []
+        if not include_removed:
+            domain.append(('removed', '=', False))
         if program_id:
             domain.append(('import_program', '=', program_id))
         if selected_week:
@@ -735,6 +849,7 @@ class MvPostlogMatching(models.Model):
         program_id=False,
         week_start=False,
         import_job_id=False,
+        include_removed=False,
     ):
         ids = []
         for value in postlog_ids or []:
@@ -752,6 +867,7 @@ class MvPostlogMatching(models.Model):
             selected_week,
             unmatched_only=False,
             import_job_id=import_job_id,
+            include_removed=include_removed,
         ) + [('id', 'in', ids)]
         postlogs = self.search(domain)
         if len(postlogs) != len(ids):
@@ -792,6 +908,7 @@ class MvPostlogMatching(models.Model):
                     selected_week,
                     unmatched_only=False,
                     import_job_id=import_job_id,
+                    include_removed=status == 'removed',
                 ),
                 status,
                 issue_filter,
@@ -1077,6 +1194,11 @@ class MvPostlogMatching(models.Model):
         elif status == 'no_suggestion':
             domain += [('import_match_status', '=', 'unmatched'),
                        ('suggested_schedule', '=', False)]
+        elif status == 'removed':
+            # The caller lifts the exclusion from the base domain for this tab;
+            # asserting it here as well keeps the tab honest if it does not.
+            domain = [term for term in domain if term != ('removed', '=', False)]
+            domain += [('removed', '=', True)]
 
         tokens = self._POSTLOG_FLAG_DOMAIN.get(issue_filter)
         if tokens:
@@ -1112,16 +1234,28 @@ class MvPostlogMatching(models.Model):
 
     @api.model
     def _postlog_stored_counts(self, base_domain):
-        """Tab counts in one grouped query rather than a pass over the week."""
+        """Tab counts in one grouped query rather than a pass over the week.
+
+        `base_domain` already excludes removed rows, so All, Matched and
+        Unmatched all describe live rows only - a removed row leaves every
+        other tab, which is what makes the Removed count meaningful. Removed is
+        counted separately, against the same scope with the exclusion lifted.
+        """
         counts = {'all': 0, 'matched': 0, 'unmatched': 0,
-                  'suggestions': 0, 'no_suggestion': 0}
-        groups = self.read_group(
-            base_domain, ['id:count'], ['import_match_status'], lazy=False,
+                  'suggestions': 0, 'no_suggestion': 0, 'removed': 0}
+        counts['removed'] = self.search_count(
+            [term for term in base_domain if term != ('removed', '=', False)]
+            + [('removed', '=', True)]
         )
-        for group in groups:
-            counts[
-                'matched' if group['import_match_status'] == 'matched' else 'unmatched'
-            ] += group['__count']
+        # _read_group, not read_group: the public one is deprecated in 19.0 and
+        # logs a DeprecationWarning with a full traceback on every page load.
+        # It returns tuples in (groupby..., aggregates...) order rather than
+        # dicts.
+        groups = self._read_group(
+            base_domain, ['import_match_status'], ['__count'],
+        )
+        for status, count in groups:
+            counts['matched' if status == 'matched' else 'unmatched'] += count
         counts['all'] = counts['matched'] + counts['unmatched']
         counts['suggestions'] = self.search_count(
             base_domain + [('import_match_status', '=', 'unmatched'),
@@ -1159,6 +1293,28 @@ class MvPostlogMatching(models.Model):
         if suggestion_count:
             return _('%(count)s suggestion(s)') % {'count': suggestion_count}
         return ''
+
+    @api.model
+    def _postlog_format_air_time(self, value):
+        """Stored 24-hour value -> "11:52:24 PM".
+
+        Mirrors formatAirTime in postlog_matching.js: the same column has to
+        read the same way on screen and in the file. Only the presentation
+        changes - the stored value stays 24-hour, which is what the export
+        sorts on.
+
+        Built by hand rather than with strftime('%p'), which is locale
+        dependent: the CSV must not change wording with the server's locale.
+        """
+        parsed = self._fuzzy_parse_time(value)
+        if parsed is None:
+            return value or ''
+        return '%02d:%02d:%02d %s' % (
+            parsed.hour % 12 or 12,
+            parsed.minute,
+            parsed.second,
+            'AM' if parsed.hour < 12 else 'PM',
+        )
 
     @api.model
     def _postlog_flag_summary(self, flags):
@@ -1217,7 +1373,12 @@ class MvPostlogMatching(models.Model):
         )
         attached = self._fuzzy_schedule_payload(postlog.schedule) if postlog.schedule else False
 
-        if postlog.schedule:
+        # Removed outranks the matching state: the row is out of scope, and
+        # saying "Unmatched" about a duplicate that will never be reconciled
+        # invites someone to go and match it.
+        if postlog.removed:
+            status = 'removed'
+        elif postlog.schedule:
             status = 'matched'
         elif postlog.suggested_schedule:
             status = 'suggestion'
@@ -1260,9 +1421,10 @@ class MvPostlogMatching(models.Model):
             # Info column now names the difference per row, and "Fuzzy
             # Suggestion" was the wording that read as though the importer had
             # failed to match rows it had in fact matched exactly.
-            'status_label': (
-                _('Matched') if status == 'matched' else _('Unmatched')
-            ),
+            'status_label': {
+                'matched': _('Matched'),
+                'removed': _('Removed'),
+            }.get(status, _('Unmatched')),
             'attached': attached,
             'suggested': suggested,
             'alternatives': candidates[1:],

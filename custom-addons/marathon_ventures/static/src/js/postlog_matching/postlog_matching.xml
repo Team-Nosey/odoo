@@ -75,6 +75,7 @@
             <button t-att-class="state.activeTab === 'unmatched' ? 'active' : ''" t-on-click="() => this.setTab('unmatched')">Unmatched <span t-esc="state.counts.unmatched"/></button>
             <button t-att-class="state.activeTab === 'suggestions' ? 'active' : ''" t-on-click="() => this.setTab('suggestions')">Suggestions <span t-esc="state.counts.suggestions"/></button>
             <button t-att-class="state.activeTab === 'no_suggestion' ? 'active' : ''" t-on-click="() => this.setTab('no_suggestion')">No Suggestion <span t-esc="state.counts.no_suggestion"/></button>
+            <button t-att-class="state.activeTab === 'removed' ? 'active' : ''" t-on-click="() => this.setTab('removed')">Removed <span t-esc="state.counts.removed"/></button>
           </nav>
 
           <div class="mv-fuzzy__searchbar">
@@ -108,7 +109,7 @@
                    where it has nothing to act on. It needs no selection, so it sits
                    ahead of the buttons that do. -->
               <button class="btn btn-outline-secondary btn-sm" t-on-click="onRefresh"
-                      t-if="state.activeTab !== 'matched'"
+                      t-if="state.activeTab !== 'matched' and state.activeTab !== 'removed'"
                       t-att-disabled="state.refreshing or state.querying or state.mutating"
                       title="Re-check unmatched rows against the current Schedules">
                 <i class="fa fa-refresh me-1" t-att-class="state.refreshing ? 'fa-spin' : ''"/><t t-esc="state.refreshing ? 'Re-checking…' : 'Refresh'"/>
@@ -117,6 +118,20 @@
               <button class="btn btn-success btn-sm" t-on-click="attachSuggested"
                       t-if="state.activeTab === 'all' or state.activeTab === 'unmatched' or state.activeTab === 'suggestions'"
                       t-att-disabled="!selectedCount or state.mutating">Attach Suggested</button>
+              <!-- Remove takes a live row out of reconciliation; Restore is its
+                   inverse and only makes sense on the tab that holds them. Both
+                   confirm first: Remove clears an attached schedule, and that is
+                   not recoverable by pressing Restore. -->
+              <button class="btn btn-outline-danger btn-sm" t-on-click="() => this.setRemoved(true)"
+                      t-if="state.activeTab !== 'removed'"
+                      t-att-disabled="!selectedCount or state.mutating">
+                <i class="fa fa-ban me-1"/>Remove
+              </button>
+              <button class="btn btn-outline-success btn-sm" t-on-click="() => this.setRemoved(false)"
+                      t-if="state.activeTab === 'removed'"
+                      t-att-disabled="!selectedCount or state.mutating">
+                <i class="fa fa-undo me-1"/>Restore
+              </button>
               <button class="btn btn-danger btn-sm" t-on-click="() => this.deleteSelected()"
                       t-att-disabled="!selectedCount or state.mutating">
                 <i class="fa fa-trash me-1"/>Delete
@@ -168,7 +183,11 @@
                        t-att-href="scheduleOpenUrl(row.attached)" t-on-click.stop="() => {}" t-esc="row.attached.name"/>
                   </td>
                   <td t-esc="row.network"/>
-                  <td><t t-esc="row.air_date"/> <span class="mv-fuzzy__muted"><t t-esc="row.day"/> · <t t-esc="row.air_time"/></span></td>
+                  <!-- Standard time, matching the postlog files themselves and
+                       the drawer's Air Time. The stored value stays 24-hour, so
+                       sorting is unaffected: the column sorts on air_date then
+                       air_time, both server-side. -->
+                  <td><t t-esc="row.air_date"/> <span class="mv-fuzzy__muted"><t t-esc="row.day"/> · <t t-esc="formatAirTime(row.air_time)"/></span></td>
                   <td t-att-class="row.length_mismatch ? 'mv-fuzzy__text-warning' : ''" t-esc="row.length"/>
                   <td t-att-class="row.rate_mismatch ? 'mv-fuzzy__text-warning' : ''">$<t t-esc="formatRate(row.rate)"/></td>
                   <td t-esc="row.deal_number"/>
@@ -329,6 +348,14 @@
 
           <section><h3>Record actions</h3>
             <button class="btn btn-outline-secondary w-100 mb-2" t-on-click="() => this.openPostlog(state.drawerRow)"><i class="fa fa-external-link me-1"/>Open Full Postlog Data Record</button>
+            <button class="btn btn-outline-danger w-100 mb-2" t-if="state.drawerRow.status !== 'removed'"
+                    t-on-click="() => this.setRemoved(true, state.drawerRow)" t-att-disabled="state.mutating">
+              <i class="fa fa-ban me-1"/>Remove from Reconciliation
+            </button>
+            <button class="btn btn-outline-success w-100 mb-2" t-if="state.drawerRow.status === 'removed'"
+                    t-on-click="() => this.setRemoved(false, state.drawerRow)" t-att-disabled="state.mutating">
+              <i class="fa fa-undo me-1"/>Restore to Reconciliation
+            </button>
             <button class="btn btn-danger w-100 mt-2" t-on-click="() => this.deleteSelected(state.drawerRow)" t-att-disabled="state.mutating"><i class="fa fa-trash me-1"/>Permanently Delete Postlog Data</button>
           </section>
         </div>
