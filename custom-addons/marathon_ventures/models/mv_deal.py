@@ -87,6 +87,9 @@ class MvDeal(models.Model):
     wapa_cinco_unwired_url = fields.Char(string='WAPA Cinco Unwired URL', compute='_compute_wapa_cinco_unwired_url', store=True)  # SF: WAPA_Cinco_Unwired_URL__c
     week_min_field = fields.Char(string='Week MIN Field', compute='_compute_week_min_field', store=True)  # SF: Week_MIN_Field__c | TODO unknown SF type: Summary
     week_max = fields.Char(string='Week Max', compute='_compute_week_max', store=True)  # SF: Week_Max__c | TODO unknown SF type: Summary
+    # Not on any form: _compute_week_pending is still a stub, so this can
+    # only ever render blank. Put it back in the view when the compute is
+    # translated - the SF formula is in the compute's docstring.
     week_pending = fields.Date(string='Week Pending', compute='_compute_week_pending', store=True)  # SF: Week_Pending__c
 
     # === Computed / Roll-Up ===

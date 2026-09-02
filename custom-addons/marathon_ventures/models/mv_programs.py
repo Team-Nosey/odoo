@@ -82,6 +82,9 @@ class MvPrograms(models.Model):
     wknd_da_filler = fields.Integer(string='WKND DA Filler')  # SF: WKND_DA_Filler__c
     wknd_on_filler = fields.Integer(string='WKND ON Filler')  # SF: WKND_ON_Filler__c
     wknd_pr_filler = fields.Integer(string='WKND PR Filler')  # SF: WKND_PR_Filler__c
+    # Not on any form: _compute_week_pending is still a stub, so this can
+    # only ever render blank. Put it back in the view when the compute is
+    # translated - the SF formula is in the compute's docstring.
     week_pending = fields.Date(string='Week Pending', compute='_compute_week_pending', store=True)  # SF: Week_Pending__c
     working_log_version = fields.Integer(string='Working Log Version')  # SF: Working_Log_Version__c
 

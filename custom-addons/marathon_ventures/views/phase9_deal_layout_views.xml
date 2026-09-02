@@ -151,7 +151,6 @@
               <field name="tier"/>
               <field name="x_class"/>
               <field name="log_exp_date"/>
-              <field name="week_pending"/>
               <field name="hiatus_dates"/>
               <field name="demographics"/>
               <field name="agency_deal_number"/>

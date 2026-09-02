@@ -46,7 +46,6 @@
               <field name="rcreconciled_week" />
               <field name="reconciled_week" />
               <field name="version_time_stamp" />
-              <field name="week_pending" />
               <field name="bundle_name" />
               <field name="bundle_rate" />
               <field name="conga_log_template" />

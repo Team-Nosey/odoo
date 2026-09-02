@@ -46,7 +46,6 @@
                 <field name="bundle_start_week"/>
                 <field name="log_exp_date"/>
                 <field name="related_advertiser_log_exp_date"/>
-                <field name="week_pending"/>
                 <field name="access_code"/>
                 <field name="account_advertiser"/>
                 <field name="account_advertiser_brand"/>
