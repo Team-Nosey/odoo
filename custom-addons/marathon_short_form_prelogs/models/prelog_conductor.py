@@ -13,7 +13,7 @@ _logger = logging.getLogger(__name__)
 
 class MvPrelogConductorBatch(models.Model):
     _name = "mv.prelog.conductor.batch"
-    _description = "Prelog Conductor Batch"
+    _description = "Prelog Batch"
     _order = "create_date desc, id desc"
 
     name = fields.Char(default="New", required=True, copy=False, readonly=True)
@@ -122,7 +122,7 @@ class MvPrelogConductorBatch(models.Model):
 
 class MvPrelogConductorRecipient(models.Model):
     _name = "mv.prelog.conductor.recipient"
-    _description = "Prelog Conductor Recipient"
+    _description = "Prelog Recipient"
     _order = "batch_id desc, contact_id, id"
 
     batch_id = fields.Many2one(
@@ -195,9 +195,16 @@ class MvPrelogConductorRecipient(models.Model):
     error_message = fields.Text(string="Error", readonly=True)
     duplicate_of_id = fields.Many2one(
         "mv.prelog.conductor.recipient",
-        string="Existing Result",
+        string="Previous Send",
         readonly=True,
         ondelete="set null",
+    )
+    is_resend = fields.Boolean(
+        string="Resend",
+        default=False,
+        readonly=True,
+        index=True,
+        help="This recipient has already been sent the same Network, Week, and Version.",
     )
     mail_id = fields.Many2one(
         "mail.mail", string="Outgoing Message", readonly=True, ondelete="set null"
@@ -226,6 +233,27 @@ class MvPrelogConductorRecipient(models.Model):
         )
         if not candidates:
             raise UserError(_("Select at least one included, prepared recipient."))
+
+        resend_candidates = candidates.filtered("is_resend")
+        if resend_candidates and not self.env.context.get(
+            "skip_prelog_resend_confirmation"
+        ):
+            confirmation = self.env[
+                "mv.prelog.conductor.resend.confirm"
+            ].create(
+                {
+                    "recipient_ids": [Command.set(candidates.ids)],
+                    "resend_recipient_ids": [Command.set(resend_candidates.ids)],
+                }
+            )
+            return {
+                "type": "ir.actions.act_window",
+                "name": _("Confirm Prelog Resend"),
+                "res_model": "mv.prelog.conductor.resend.confirm",
+                "res_id": confirmation.id,
+                "view_mode": "form",
+                "target": "new",
+            }
 
         sent = 0
         failures = 0
@@ -266,7 +294,7 @@ class MvPrelogConductorRecipient(models.Model):
                         )
                         failures += 1
             except Exception as exc:  # keep processing the selected recipients
-                _logger.exception("Could not send Prelog Conductor recipient %s", line.id)
+                _logger.exception("Could not send prelog recipient %s", line.id)
                 line.write(
                     {
                         "status": "failed",
@@ -281,7 +309,7 @@ class MvPrelogConductorRecipient(models.Model):
             "type": "ir.actions.client",
             "tag": "display_notification",
             "params": {
-                "title": _("Prelog Conductor"),
+                "title": _("Prelog Generator"),
                 "message": _("Sent %(sent)s email(s); %(failed)s failed.")
                 % {"sent": sent, "failed": failures},
                 "type": "success" if not failures else "warning",
@@ -326,6 +354,12 @@ class MvPrelogConductorRecipient(models.Model):
             old_attachment = line.attachment_id
             keep_old_attachment = bool(line.mail_id)
             current_email = (line.contact_id.email or "").strip()
+            previous_send = line._find_previous_send()
+            is_resend = (
+                line.is_resend
+                or line.status in {"queued", "sent"}
+                or bool(previous_send)
+            )
             line.write(
                 {
                     "email": current_email or False,
@@ -334,7 +368,8 @@ class MvPrelogConductorRecipient(models.Model):
                     "mail_id": False,
                     "status": "pending",
                     "error_message": False,
-                    "duplicate_of_id": False,
+                    "is_resend": is_resend,
+                    "duplicate_of_id": previous_send.id if previous_send else False,
                     "rendered_at": False,
                     "queued_at": False,
                     "sent_at": False,
@@ -347,26 +382,53 @@ class MvPrelogConductorRecipient(models.Model):
     def _cron_process_prelog_conductor(self):
         self._sync_mail_statuses()
         lines = self.search(
-            [("status", "=", "pending")], order="create_date, id", limit=10
+            [("status", "in", ["pending", "duplicate"])],
+            order="create_date, id",
+            limit=10,
         )
         for line in lines:
-            line.write(
-                {
-                    "status": "processing",
-                    "attempt_count": line.attempt_count + 1,
-                    "error_message": False,
-                }
-            )
+            processing_values = {
+                "status": "processing",
+                "attempt_count": line.attempt_count + 1,
+                "error_message": False,
+            }
+            if line.status == "duplicate":
+                previous_send = line._find_previous_send()
+                processing_values.update(
+                    {
+                        "included": bool(line.email),
+                        "is_resend": bool(previous_send),
+                        "duplicate_of_id": (
+                            previous_send.id if previous_send else False
+                        ),
+                    }
+                )
+            line.write(processing_values)
             try:
                 with self.env.cr.savepoint():
                     line._generate_workbook()
             except Exception as exc:
                 _logger.exception(
-                    "Workbook generation failed for Prelog Conductor recipient %s",
+                    "Workbook generation failed for prelog recipient %s",
                     line.id,
                 )
                 line.write({"status": "failed", "error_message": str(exc)})
         self._sync_mail_statuses()
+
+    def _find_previous_send(self):
+        self.ensure_one()
+        return self.search(
+            [
+                ("id", "!=", self.id),
+                ("network_id", "=", self.network_id.id),
+                ("week", "=", self.week),
+                ("version", "=", self.version),
+                ("contact_id", "=", self.contact_id.id),
+                ("status", "in", ["queued", "sent"]),
+            ],
+            order="id desc",
+            limit=1,
+        )
 
     @api.model
     def _sync_mail_statuses(self):
@@ -413,3 +475,44 @@ class MvPrelogConductorRecipient(models.Model):
                 "error_message": False,
             }
         )
+
+
+class MvPrelogConductorResendConfirm(models.TransientModel):
+    _name = "mv.prelog.conductor.resend.confirm"
+    _description = "Confirm Prelog Resend"
+
+    recipient_ids = fields.Many2many(
+        "mv.prelog.conductor.recipient",
+        "mv_prelog_resend_confirm_recipient_rel",
+        "wizard_id",
+        "recipient_id",
+        string="Emails to Send",
+        required=True,
+        readonly=True,
+    )
+    resend_recipient_ids = fields.Many2many(
+        "mv.prelog.conductor.recipient",
+        "mv_prelog_resend_confirm_previous_rel",
+        "wizard_id",
+        "recipient_id",
+        string="Previously Sent Prelogs",
+        required=True,
+        readonly=True,
+    )
+    recipient_count = fields.Integer(compute="_compute_counts")
+    resend_count = fields.Integer(compute="_compute_counts")
+
+    @api.depends("recipient_ids", "resend_recipient_ids")
+    def _compute_counts(self):
+        for wizard in self:
+            wizard.recipient_count = len(wizard.recipient_ids)
+            wizard.resend_count = len(wizard.resend_recipient_ids)
+
+    def action_confirm_resend(self):
+        self.ensure_one()
+        candidates = self.recipient_ids.exists()
+        if not candidates:
+            raise UserError(_("There are no prepared emails to send."))
+        return candidates.with_context(
+            skip_prelog_resend_confirmation=True
+        ).action_send_selected()

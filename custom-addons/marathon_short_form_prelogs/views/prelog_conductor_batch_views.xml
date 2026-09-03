@@ -4,17 +4,18 @@
         <field name="name">mv.prelog.conductor.recipient.list</field>
         <field name="model">mv.prelog.conductor.recipient</field>
         <field name="arch" type="xml">
-            <list string="Prelog Conductor Recipients" multi_edit="1" create="false" delete="false">
+            <list string="Prelog Recipients" multi_edit="1" create="false" delete="false" limit="1000">
                 <header>
                     <button name="action_send_selected" string="Send Selected" type="object" class="btn-primary"/>
                     <button name="action_retry_generation" string="Retry Generation" type="object"/>
                     <button name="action_regenerate" string="Regenerate" type="object"/>
                 </header>
-                <field name="included"/>
+                <field name="included" widget="prelog_include_checkbox" readonly="not email or status in ('queued', 'sent')"/>
                 <field name="contact_id"/>
                 <field name="account_id" optional="show"/>
                 <field name="email"/>
                 <field name="prelog_count"/>
+                <field name="is_resend" optional="show"/>
                 <field name="attachment_filename" string="Attachment"/>
                 <button name="action_download_attachment" type="object" icon="fa-download" title="Download workbook" invisible="not attachment_id"/>
                 <field name="status" widget="badge" decoration-info="status in ('pending', 'processing')" decoration-success="status in ('prepared', 'sent')" decoration-warning="status in ('missing_email', 'duplicate', 'queued')" decoration-danger="status == 'failed'"/>
@@ -76,7 +77,7 @@
         <field name="name">mv.prelog.conductor.recipient.search</field>
         <field name="model">mv.prelog.conductor.recipient</field>
         <field name="arch" type="xml">
-            <search string="Prelog Conductor Recipients">
+            <search string="Prelog Recipients">
                 <field name="contact_id"/>
                 <field name="account_id"/>
                 <field name="email"/>
@@ -96,7 +97,7 @@
     </record>
 
     <record id="action_mv_prelog_conductor_recipient" model="ir.actions.act_window">
-        <field name="name">Prelog Conductor Recipients</field>
+        <field name="name">Prelog Recipients</field>
         <field name="res_model">mv.prelog.conductor.recipient</field>
         <field name="view_mode">list,form</field>
         <field name="search_view_id" ref="view_mv_prelog_conductor_recipient_search"/>
@@ -106,7 +107,7 @@
         <field name="name">mv.prelog.conductor.batch.list</field>
         <field name="model">mv.prelog.conductor.batch</field>
         <field name="arch" type="xml">
-            <list string="Prelog Conductor Batches" create="false" delete="false">
+            <list string="Prelog Batches" create="false" delete="false">
                 <field name="name"/>
                 <field name="network_id"/>
                 <field name="week"/>
@@ -125,9 +126,9 @@
         <field name="name">mv.prelog.conductor.batch.form</field>
         <field name="model">mv.prelog.conductor.batch</field>
         <field name="arch" type="xml">
-            <form string="Prelog Conductor Batch" create="false" delete="false">
+            <form string="Prelog Batch" create="false" delete="false">
                 <header>
-                    <button name="action_send_all" string="Send All" type="object" class="btn-primary" invisible="not prepared_count"/>
+                    <button name="action_send_all" string="Send All" type="object" class="btn-primary"/>
                     <field name="state" widget="statusbar"/>
                 </header>
                 <sheet>
@@ -155,16 +156,17 @@
                     </group>
                     <separator string="Recipients"/>
                     <field name="recipient_ids" nolabel="1" context="{'default_batch_id': id}">
-                        <list multi_edit="1" create="false" delete="false">
+                        <list multi_edit="1" create="false" delete="false" limit="1000">
                             <header>
                                 <button name="action_send_selected" string="Send Selected" type="object" class="btn-primary"/>
                                 <button name="action_retry_generation" string="Retry Generation" type="object"/>
                                 <button name="action_regenerate" string="Regenerate" type="object"/>
                             </header>
-                            <field name="included"/>
+                            <field name="included" widget="prelog_include_checkbox" readonly="not email or status in ('queued', 'sent')"/>
                             <field name="contact_id"/>
                             <field name="email"/>
                             <field name="prelog_count"/>
+                            <field name="is_resend" optional="show"/>
                             <field name="attachment_filename" string="Attachment"/>
                             <button name="action_download_attachment" type="object" icon="fa-download" title="Download workbook" invisible="not attachment_id"/>
                             <field name="status" widget="badge" decoration-info="status in ('pending', 'processing')" decoration-success="status in ('prepared', 'sent')" decoration-warning="status in ('missing_email', 'duplicate', 'queued')" decoration-danger="status == 'failed'"/>
@@ -178,7 +180,7 @@
     </record>
 
     <record id="action_mv_prelog_conductor_batch" model="ir.actions.act_window">
-        <field name="name">Prelog Conductor Batches</field>
+        <field name="name">Prelog Batches</field>
         <field name="res_model">mv.prelog.conductor.batch</field>
         <field name="view_mode">list,form</field>
     </record>
