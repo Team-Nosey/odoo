@@ -2,9 +2,11 @@
 
 import base64
 import logging
+from html import escape
 
 from odoo import Command, _, api, fields, models
 from odoo.exceptions import UserError
+from odoo.tools import format_date
 
 from ..services.xlsx_renderer import render_short_form_workbook
 
@@ -57,6 +59,28 @@ class MvPrelogConductorBatch(models.Model):
     failed_count = fields.Integer(compute="_compute_summary", store=True)
     queued_count = fields.Integer(compute="_compute_summary", store=True)
     sent_count = fields.Integer(compute="_compute_summary", store=True)
+    ready_notification_requested = fields.Boolean(
+        default=False,
+        readonly=True,
+        copy=False,
+    )
+    ready_notification_mail_id = fields.Many2one(
+        "mail.mail",
+        string="Ready Email",
+        readonly=True,
+        copy=False,
+        ondelete="set null",
+    )
+    ready_notification_queued_at = fields.Datetime(
+        string="Ready Email Queued",
+        readonly=True,
+        copy=False,
+    )
+    ready_notification_error = fields.Text(
+        string="Ready Email Error",
+        readonly=True,
+        copy=False,
+    )
 
     @api.model_create_multi
     def create(self, vals_list):
@@ -118,6 +142,86 @@ class MvPrelogConductorBatch(models.Model):
         action["domain"] = [("batch_id", "=", self.id)]
         action["context"] = {"default_batch_id": self.id, "create": False}
         return action
+
+    def _queue_ready_notifications(self):
+        """Queue one completion email after workbook generation has finished."""
+        for batch in self:
+            if (
+                not batch.ready_notification_requested
+                or batch.ready_notification_queued_at
+                or not batch.recipient_ids
+                or batch.recipient_ids.filtered(
+                    lambda line: line.status in {"pending", "processing", "duplicate"}
+                )
+            ):
+                continue
+
+            recipient_email = (batch.requested_by_id.email or "").strip()
+            if not recipient_email:
+                error = _(
+                    "The ready notification could not be queued because %(user)s "
+                    "does not have an email address."
+                ) % {"user": batch.requested_by_id.display_name}
+                if batch.ready_notification_error != error:
+                    batch.ready_notification_error = error
+                continue
+
+            week = format_date(batch.env, batch.week)
+            network = batch.network_id.display_name
+            action_xmlid = (
+                "marathon_short_form_prelogs.action_mv_prelog_conductor_batch"
+            )
+            batch_url = (
+                f"{batch.get_base_url().rstrip('/')}"
+                f"/odoo/action-{action_xmlid}/{batch.id}"
+            )
+            subject = _(
+                "Prelogs ready to send - %(network)s, %(week)s, %(version)s"
+            ) % {
+                "network": network,
+                "week": week,
+                "version": batch.version,
+            }
+            body_html = _(
+                "<p>Your prelogs for %(network)s for the week of %(week)s, "
+                "version %(version)s are ready to send.</p>"
+                "<p><a href=\"%(url)s\">Open %(batch)s to review and send them</a></p>"
+            ) % {
+                "network": escape(network or ""),
+                "week": escape(week),
+                "version": batch.version,
+                "url": escape(batch_url, quote=True),
+                "batch": escape(batch.name),
+            }
+
+            try:
+                with self.env.cr.savepoint():
+                    mail = self.env["mail.mail"].create(
+                        {
+                            "subject": subject,
+                            "body_html": body_html,
+                            "email_to": batch.requested_by_id.email_formatted,
+                            "email_from": self.env.company.email_formatted
+                            or batch.requested_by_id.email_formatted,
+                            "model": batch._name,
+                            "res_id": batch.id,
+                            "auto_delete": False,
+                        }
+                    )
+                    batch.write(
+                        {
+                            "ready_notification_mail_id": mail.id,
+                            "ready_notification_queued_at": fields.Datetime.now(),
+                            "ready_notification_error": False,
+                        }
+                    )
+                    self.env.ref("mail.ir_cron_mail_scheduler_action")._trigger()
+            except Exception as exc:
+                _logger.exception(
+                    "Could not queue ready notification for prelog batch %s",
+                    batch.id,
+                )
+                batch.ready_notification_error = str(exc)
 
 
 class MvPrelogConductorRecipient(models.Model):
@@ -413,6 +517,17 @@ class MvPrelogConductorRecipient(models.Model):
                     line.id,
                 )
                 line.write({"status": "failed", "error_message": str(exc)})
+        self.env.flush_all()
+        batches = self.env["mv.prelog.conductor.batch"].search(
+            [
+                ("ready_notification_requested", "=", True),
+                ("ready_notification_queued_at", "=", False),
+                ("state", "in", ["ready", "attention"]),
+            ],
+            order="create_date, id",
+            limit=50,
+        )
+        batches._queue_ready_notifications()
         self._sync_mail_statuses()
 
     def _find_previous_send(self):

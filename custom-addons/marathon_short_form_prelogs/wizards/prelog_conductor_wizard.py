@@ -197,6 +197,7 @@ class MvPrelogConductorWizard(models.TransientModel):
                 "week": self.week,
                 "version": self.version,
                 "requested_by_id": self.env.user.id,
+                "ready_notification_requested": True,
             }
         )
 
@@ -237,27 +238,17 @@ class MvPrelogConductorWizard(models.TransientModel):
             ],
             "target": "main",
         }
-        batches_action = self.env.ref(
-            "marathon_short_form_prelogs.action_mv_prelog_conductor_batch"
-        )
         return {
             "type": "ir.actions.client",
             "tag": "display_notification",
             "params": {
                 "title": _("Prelog Batch %s Started") % batch.name,
                 "message": _(
-                    "Your prelog batch is being prepared in the background. "
-                    "You can safely close this page while the system processes "
-                    "the request. View progress in %s."
+                    "Your prelogs are being generated. You'll get an email when "
+                    "they're ready to send. You can safely close this page."
                 ),
-                "links": [
-                    {
-                        "label": _("Prelog Batches"),
-                        "url": f"/odoo/action-{batches_action.id}",
-                    }
-                ],
                 "type": "info",
-                "sticky": True,
+                "sticky": False,
                 "next": batch_action,
             },
         }

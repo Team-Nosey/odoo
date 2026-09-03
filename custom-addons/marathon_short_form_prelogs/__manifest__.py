@@ -2,7 +2,7 @@
 {
     "name": "Prelog Generator",
     "summary": "Prepare contact-specific Short Form prelog workbooks and emails.",
-    "version": "19.0.1.3.0",
+    "version": "19.0.1.4.0",
     "license": "LGPL-3",
     "author": "Marathon Ventures",
     "category": "Operations",
