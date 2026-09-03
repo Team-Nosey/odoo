@@ -8,6 +8,13 @@ shared, and adds the cases that only exist on the postlog side:
   * post-midnight (vendor "XM") air times against overnight rotations.
   * re-importing a week is blocked rather than replacing it.
   * there is no ``version`` and no ``removed``.
+  * matching is stored by the import, not recomputed on page load. A clean
+    match is attached at import, so a row can only be a pending suggestion if
+    it has a real difference - fixtures below build genuinely fuzzy rows for
+    that reason. Two tests were dropped when this changed: one asserted the
+    self-heal contract (editing a Schedule re-matched on refresh) and one
+    asserted the "Ready to attach" filter, a state that is now unreachable
+    because a clean candidate is always sold and therefore always attached.
 
 Program naming matters here. ``load_program_config`` slugifies the program name,
 so a program called "True Crime Network" picks up postlog_configs/
@@ -24,6 +31,9 @@ from datetime import date
 from odoo import Command
 from odoo.exceptions import UserError
 from odoo.tests import TransactionCase, new_test_user, tagged
+
+
+
 
 
 @tagged('post_install', '-at_install')
@@ -102,10 +112,27 @@ class TestPostlogMatching(TransactionCase):
             'spot_rate': 100.0,
             'product': 'Test Advertiser / Product',
             'status': 'aired',
-            'import_match_status': 'created_without_schedule',
+            'import_match_status': 'unmatched',
         }
         values.update(overrides)
-        return self.Postlog.create(values)
+        postlog = self.Postlog.create(values)
+        # Mirror the import: a row is matched once, on creation, and the
+        # workbench reads what was stored. Fixtures that pin a schedule
+        # explicitly are left alone - those are asserting a given end state, not
+        # exercising the matcher.
+        # attach=False on purpose. These fixtures stand in for "a row the
+        # import created and left unattached", which is the only state the
+        # workbench actually works on - a clean match is attached at import and
+        # never reaches the suggestion queue. Attachment-at-import is asserted
+        # directly against _postlog_store_matching where that is the point.
+        if 'schedule' not in overrides:
+            self.Postlog._postlog_store_matching(
+                postlog,
+                postlog.import_program or self.program,
+                postlog.import_week_value or self.week,
+                attach=False,
+            )
+        return postlog
 
     def _search(self, **kwargs):
         return self.Postlog.fuzzy_match_search(
@@ -125,7 +152,7 @@ class TestPostlogMatching(TransactionCase):
         self.assertEqual(row['id'], postlog.id)
         self.assertEqual(row['suggested']['id'], self.schedule.id)
         self.assertTrue(row['suggestion_attachable'])
-        self.assertFalse(row['reason'])
+        self.assertEqual(row['info'], '1 suggestion(s)')
         self.assertEqual(row['match_quality'], 'exact')
 
         applied = self.Postlog.fuzzy_match_apply([{
@@ -137,6 +164,12 @@ class TestPostlogMatching(TransactionCase):
         self.assertEqual(postlog.schedule, self.schedule)
         self.assertEqual(postlog.import_match_status, 'matched')
         self.assertIn('Postlog Workbench', postlog.import_match_detail)
+        # Attaching settles the row, so the suggestion state goes with it.
+        # Left behind, Info read "1 suggestion(s)" beside a Matched badge and
+        # the candidate JSON sat on a row nobody will review again.
+        self.assertFalse(postlog.info)
+        self.assertFalse(postlog.possible_schedules)
+        self.assertFalse(self._search()['rows'][0]['info'])
 
         # Re-attaching an already matched row must be refused.
         with self.assertRaises(UserError):
@@ -169,7 +202,7 @@ class TestPostlogMatching(TransactionCase):
         row = self._search()['rows'][0]
         self.assertEqual(row['status'], 'suggestion')
         self.assertNotEqual(row['match_quality'], 'exact')
-        self.assertTrue(row['reason'])
+        self.assertFalse(row['exact_time_match'])
 
     def test_wrong_network_is_rejected_when_config_declares_one(self):
         self._create_postlog(broadcast_network='Some Other Network')
@@ -216,7 +249,6 @@ class TestPostlogMatching(TransactionCase):
         self.assertEqual(row['suggested']['id'], self.schedule.id)
         self.assertTrue(row['rate_mismatch'])
         self.assertNotEqual(row['match_quality'], 'exact')
-        self.assertIn('rate', (row['reason'] or '').lower())
 
     def test_day_mismatch_is_a_fuzzy_suggestion(self):
         """Aired on a day the rotation does not run: still show the schedule."""
@@ -227,31 +259,6 @@ class TestPostlogMatching(TransactionCase):
         self.assertEqual(row['suggested']['id'], self.schedule.id)
         self.assertTrue(row['day_mismatch'])
         self.assertNotEqual(row['match_quality'], 'exact')
-        self.assertIn('day', (row['reason'] or '').lower())
-
-    def test_fixing_a_schedule_makes_it_exact_but_does_not_auto_attach(self):
-        """Correcting a Schedule must show the row as ready, never attach it.
-
-        Same contract as prelog: the row stays a Fuzzy Suggestion, the quality
-        chip flips to exact and the reason clears, and a human still has to
-        press Attach.
-        """
-        self.schedule.days_allowed = [Command.set(self.monday.ids)]
-        postlog = self._create_postlog(air_date=date(2026, 7, 28))      # Tuesday
-        row = self._search()['rows'][0]
-        self.assertEqual(row['match_quality'], 'fuzzy')
-        self.assertTrue(row['day_mismatch'])
-
-        # the operator adds Tuesday to the rotation and re-runs
-        self.schedule.days_allowed = [Command.link(self.tuesday.id)]
-        row = self._search()['rows'][0]
-        self.assertEqual(row['match_quality'], 'exact')           # chip says Exact
-        self.assertFalse(row['reason'])                           # UI shows "Ready to attach"
-        self.assertEqual(row['status'], 'suggestion')             # stays in Fuzzy Suggestions
-        self.assertEqual(row['status_label'], 'Fuzzy Suggestion')
-        self.assertTrue(row['suggestion_attachable'])
-        self.assertFalse(postlog.schedule)                           # NOT auto-attached
-        self.assertEqual(self._search()['counts']['matched'], 0)
 
 
     def test_mis_keyed_rate_does_not_push_the_postlog_to_another_rotation(self):
@@ -281,7 +288,6 @@ class TestPostlogMatching(TransactionCase):
         self.assertEqual(row['suggested']['id'], correct.id)
         self.assertNotEqual(row['suggested']['id'], early.id)
         self.assertTrue(row['rate_mismatch'])
-        self.assertIn('rate', (row['reason'] or '').lower())
 
         # and the 8p-9p schedule is still offered as an alternative
         alt_ids = [a['id'] for a in row['alternatives']]
@@ -329,14 +335,6 @@ class TestPostlogMatching(TransactionCase):
         self.assertEqual(result['attached'], 1)
         self.assertEqual(postlog.schedule, other)
 
-    def test_ready_to_attach_issue_filter(self):
-        """'Ready to attach' isolates exact-but-unattached rows for bulk attach."""
-        ready = self._create_postlog()                              # exact
-        self._create_postlog(spot_rate=999.0)                       # fuzzy, rate
-        self._create_postlog(schedule=self.schedule.id, import_match_status='matched')
-        rows = self._search(issue_filter='ready')['rows']
-        self.assertEqual([r['id'] for r in rows], [ready.id])
-
     def test_missing_air_date_still_gives_no_suggestion(self):
         """A missing date is not a day *mismatch* - there is nothing to compare,
         so suggesting a schedule would be a guess."""
@@ -344,7 +342,7 @@ class TestPostlogMatching(TransactionCase):
         row = self._search()['rows'][0]
         self.assertEqual(row['status'], 'no_suggestion')
         self.assertFalse(row['suggested'])
-        self.assertIn('Missing air date', row['reason'])
+        self.assertEqual(row['info'], 'Missing air date')
 
     def test_right_day_and_rate_outrank_a_mismatching_sibling(self):
         """Ranking must prefer the candidate that matches day and rate."""
@@ -386,17 +384,309 @@ class TestPostlogMatching(TransactionCase):
         row = self._search()['rows'][0]
         self.assertNotEqual(row['match_quality'], 'exact')
 
-    def test_canceled_schedule_is_found_but_not_attachable(self):
+    def test_canceled_schedule_is_not_a_candidate_at_all(self):
+        """A canceled schedule is excluded, not offered-and-refused.
+
+        It used to surface as a suggestion the drawer then refused to attach,
+        which reads as "here is your match" followed by "no you cannot have it".
+        It is not attachable and it is not useful, so it is no longer a
+        candidate on either side - the import and the workbench now agree on
+        eligibility because they share one candidate query.
+        """
         self.schedule.status = 'canceled'
         self._create_postlog()
+
         row = self._search()['rows'][0]
-        self.assertFalse(row['suggestion_attachable'])
-        self.assertIn('cancel', (row['reason'] or '').lower())
+
+        self.assertEqual(row['status'], 'no_suggestion')
+        self.assertFalse(row['suggested'])
+        self.assertFalse(row['alternatives'])
 
     def test_missing_deal_number_gives_no_candidates(self):
         self._create_postlog(network_deal_number=False)
         row = self._search()['rows'][0]
         self.assertEqual(row['status'], 'no_suggestion')
+        self.assertEqual(row['info'], 'Missing deal number')
+
+    def test_time_issue_filter_includes_rows_inside_the_fuzzy_buffer(self):
+        """"Time issue" has to mean both kinds of time problem.
+
+        A spot outside its rotation but within the buffer is flagged
+        `time_buffer`, not `time` - and those are exactly the rows held back for
+        review. Filtering on `time` alone hid them.
+        """
+        buffered = self._create_postlog(air_time='10:30:00')   # 30 min past 10a
+        self.assertIn('time_buffer', buffered.match_flags)
+        self.assertNotIn(',time,', buffered.match_flags)
+
+        found = self._search(issue_filter='time')['rows']
+        self.assertIn(buffered.id, [row['id'] for row in found])
+
+    def test_fuzzy_match_row_reads_one_row_outside_the_active_filter(self):
+        """The drawer keeps showing a row after Refresh attaches it.
+
+        Once attached, the row leaves a filtered list - but the drawer is still
+        open on it, so it needs a read that does not go through the filter.
+        """
+        postlog = self._create_postlog()
+        row = self.Postlog.fuzzy_match_row(postlog.id)
+        self.assertEqual(row['id'], postlog.id)
+        self.assertEqual(row['suggested']['id'], self.schedule.id)
+
+        # attach it, and the same call still returns it - now as matched
+        self.Postlog.fuzzy_match_apply([{
+            'postlog_id': postlog.id,
+            'schedule_id': self.schedule.id,
+            'source': 'suggested',
+        }], self.program.id, self.week.isoformat())
+        self.assertFalse(self._search(status='suggestions')['rows'])
+        again = self.Postlog.fuzzy_match_row(postlog.id)
+        self.assertEqual(again['status'], 'matched')
+        self.assertEqual(again['attached']['id'], self.schedule.id)
+
+        self.assertFalse(self.Postlog.fuzzy_match_row(0))
+
+    # ------------------------------------------------------------------
+    # Remove / restore: duplicate and bonus spots that must not reconcile
+    # ------------------------------------------------------------------
+
+    def test_removing_a_matched_row_clears_its_attachment(self):
+        """The clear is the point, not a side effect.
+
+        A duplicate that keeps its schedule still reconciles against the deal,
+        which is the one thing removing it is meant to prevent.
+        """
+        postlog = self._create_postlog(
+            schedule=self.schedule.id, import_match_status='matched',
+        )
+        result = self.Postlog.fuzzy_match_set_removed(
+            [postlog.id], True, self.program.id, self.week.isoformat(),
+        )
+        self.assertEqual(result['updated'], 1)
+        self.assertTrue(postlog.removed)
+        self.assertFalse(postlog.schedule)
+        self.assertEqual(postlog.import_match_status, 'unmatched')
+        # A removed row makes no claim about matching.
+        self.assertFalse(postlog.suggested_schedule)
+        self.assertFalse(postlog.possible_schedules)
+        self.assertFalse(postlog.info)
+        self.assertIn('Cleared Schedule', postlog.import_match_detail)
+
+    def test_a_removed_row_leaves_every_other_tab(self):
+        """Removed is not a kind of unmatched - it is out of scope.
+
+        Both counts drop, which is what makes the Removed count mean something.
+        """
+        keep = self._create_postlog()
+        drop = self._create_postlog(
+            schedule=self.schedule.id, import_match_status='matched',
+        )
+        before = self._search()['counts']
+        self.assertEqual(before['all'], 2)
+        self.assertEqual(before['matched'], 1)
+
+        self.Postlog.fuzzy_match_set_removed(
+            [drop.id], True, self.program.id, self.week.isoformat(),
+        )
+        after = self._search()['counts']
+        self.assertEqual(after['all'], 1)
+        self.assertEqual(after['matched'], 0)
+        self.assertEqual(after['removed'], 1)
+        self.assertEqual([r['id'] for r in self._search()['rows']], [keep.id])
+
+        removed_tab = self._search(status='removed')
+        self.assertEqual([r['id'] for r in removed_tab['rows']], [drop.id])
+        self.assertEqual(removed_tab['rows'][0]['status'], 'removed')
+        self.assertEqual(removed_tab['rows'][0]['status_label'], 'Removed')
+
+    def test_restoring_reattaches_an_exact_match(self):
+        postlog = self._create_postlog(
+            schedule=self.schedule.id, import_match_status='matched',
+        )
+        self.Postlog.fuzzy_match_set_removed(
+            [postlog.id], True, self.program.id, self.week.isoformat(),
+        )
+        self.Postlog.fuzzy_match_set_removed(
+            [postlog.id], False, self.program.id, self.week.isoformat(),
+        )
+        self.assertFalse(postlog.removed)
+        self.assertEqual(postlog.schedule, self.schedule)
+        self.assertEqual(postlog.import_match_status, 'matched')
+        self.assertIn('matching re-run', postlog.import_match_detail)
+
+    def test_restoring_a_fuzzy_row_comes_back_as_a_suggestion(self):
+        """A spot outside its rotation must not re-attach on restore.
+
+        The bar is the import's: clean on all four checks. 30 minutes past the
+        rotation is inside the fuzzy buffer, which is not clean.
+        """
+        postlog = self._create_postlog(air_time='10:30:00')
+        self.assertFalse(postlog.schedule)
+        self.Postlog.fuzzy_match_set_removed(
+            [postlog.id], True, self.program.id, self.week.isoformat(),
+        )
+        self.Postlog.fuzzy_match_set_removed(
+            [postlog.id], False, self.program.id, self.week.isoformat(),
+        )
+        self.assertFalse(postlog.removed)
+        self.assertFalse(postlog.schedule)
+        self.assertEqual(postlog.suggested_schedule, self.schedule)
+        row = self._search(status='suggestions')['rows'][0]
+        self.assertEqual(row['id'], postlog.id)
+
+    def test_refresh_does_not_resurrect_a_removed_row(self):
+        """Refresh re-checks unmatched rows, and a removed row is unmatched.
+
+        Without the scope exclusion it would hand suggestions back to spots
+        somebody deliberately took out of reconciliation.
+        """
+        postlog = self._create_postlog()
+        self.Postlog.fuzzy_match_set_removed(
+            [postlog.id], True, self.program.id, self.week.isoformat(),
+        )
+        result = self.Postlog.fuzzy_match_refresh(
+            self.program.id, self.week.isoformat(),
+        )
+        self.assertEqual(result['checked'], 0)
+        self.assertFalse(postlog.suggested_schedule)
+        self.assertFalse(postlog.info)
+        self.assertTrue(postlog.removed)
+
+    def test_bulk_remove_and_restore_span_the_whole_filter(self):
+        postlogs = self.Postlog.browse()
+        for _index in range(3):
+            postlogs |= self._create_postlog()
+        removed = self.Postlog.fuzzy_workbench_bulk_action(
+            'remove',
+            {'all_matching': True, 'ids': [], 'excluded_ids': []},
+            self.program.id, self.week.isoformat(),
+        )
+        self.assertEqual(removed['updated'], 3)
+        self.assertEqual(self._search()['counts']['removed'], 3)
+
+        restored = self.Postlog.fuzzy_workbench_bulk_action(
+            'unremove',
+            {'all_matching': True, 'ids': [], 'excluded_ids': []},
+            self.program.id, self.week.isoformat(), status='removed',
+        )
+        self.assertEqual(restored['updated'], 3)
+        self.assertEqual(self._search()['counts']['removed'], 0)
+        self.assertEqual(self._search()['counts']['matched'], 3)
+
+    def test_export_writes_standard_time(self):
+        """The export reads the way the screen does, and the way the file did.
+
+        Midnight and noon are where 12-hour clocks go wrong, so both are
+        asserted rather than a mid-afternoon time that cannot distinguish them.
+        """
+        self.assertEqual(
+            self.Postlog._postlog_format_air_time('00:00:00'), '12:00:00 AM')
+        self.assertEqual(
+            self.Postlog._postlog_format_air_time('12:00:00'), '12:00:00 PM')
+        self.assertEqual(
+            self.Postlog._postlog_format_air_time('23:52:24'), '11:52:24 PM')
+        self.assertEqual(
+            self.Postlog._postlog_format_air_time('09:30:00'), '09:30:00 AM')
+        # unparseable input survives rather than vanishing
+        self.assertEqual(self.Postlog._postlog_format_air_time('garbage'), 'garbage')
+        self.assertEqual(self.Postlog._postlog_format_air_time(False), '')
+
+        self._create_postlog(air_time='23:52:24')
+        content = self.Postlog.fuzzy_workbench_export_csv(
+            self.program.id, self.week.isoformat(), status='all',
+        )['content']
+        self.assertIn('11:52:24 PM', content)
+        self.assertNotIn('23:52:24', content)
+
+    def test_export_excludes_removed_rows_unless_you_ask_for_them(self):
+        keep = self._create_postlog()
+        drop = self._create_postlog()
+        self.Postlog.fuzzy_match_set_removed(
+            [drop.id], True, self.program.id, self.week.isoformat(),
+        )
+        live = self.Postlog.fuzzy_workbench_export_csv(
+            self.program.id, self.week.isoformat(), status='all',
+        )
+        self.assertIn(keep.name, live['content'])
+        self.assertNotIn(drop.name, live['content'])
+
+        only_removed = self.Postlog.fuzzy_workbench_export_csv(
+            self.program.id, self.week.isoformat(), status='removed',
+        )
+        self.assertIn(drop.name, only_removed['content'])
+        self.assertNotIn(keep.name, only_removed['content'])
+
+    def test_restoring_a_mixed_selection_splits_correctly(self):
+        """Mirrors the tour: a clean row and a 30-minutes-off row, together.
+
+        Restored as one recordset, so this also proves the matcher's grouping
+        does not let one row's attachment starve the other's suggestions.
+        """
+        clean = self._create_postlog()
+        fuzzy = self._create_postlog(air_time='10:30:00')
+        both = clean | fuzzy
+        self.Postlog.fuzzy_match_set_removed(
+            both.ids, True, self.program.id, self.week.isoformat(),
+        )
+        self.Postlog.fuzzy_match_set_removed(
+            both.ids, False, self.program.id, self.week.isoformat(),
+        )
+        self.assertEqual(clean.schedule, self.schedule)
+        self.assertFalse(fuzzy.schedule)
+        self.assertEqual(
+            fuzzy.suggested_schedule, self.schedule,
+            'restoring together must not starve the fuzzy row of candidates',
+        )
+        counts = self._search()['counts']
+        self.assertEqual(counts['matched'], 1)
+        self.assertEqual(counts['suggestions'], 1)
+
+    def test_the_status_badge_reports_the_two_stored_codes(self):
+        """The badge says what is stored: Matched or Unmatched.
+
+        It used to split unmatched into "Fuzzy Suggestion" and "No Suggestion".
+        Both are unmatched, the Info column now names the difference per row,
+        and the word "Fuzzy" on a row whose match was exact is what made an
+        operator conclude the importer had not run.
+        """
+        with_suggestion = self._create_postlog(spot_rate=999.0)
+        without = self._create_postlog(network_deal_number=False)
+        matched = self._create_postlog(
+            schedule=self.schedule.id, import_match_status='matched',
+        )
+
+        labels = {row['id']: row['status_label'] for row in self._search()['rows']}
+        self.assertEqual(labels[matched.id], 'Matched')
+        self.assertEqual(labels[with_suggestion.id], 'Unmatched')
+        self.assertEqual(labels[without.id], 'Unmatched')
+
+        # the underlying split is still available to the UI, which branches on it
+        statuses = {row['id']: row['status'] for row in self._search()['rows']}
+        self.assertEqual(statuses[with_suggestion.id], 'suggestion')
+        self.assertEqual(statuses[without.id], 'no_suggestion')
+
+    def test_a_no_suggestion_row_always_says_why(self):
+        """The No Suggestion tab used to be a column of blanks.
+
+        Every row that reaches it does so for one of three reasons, and the
+        operator cannot act on any of them without being told which. The text
+        was already computed at read time and rendered nowhere; it is stored
+        now, so it also sorts and filters.
+        """
+        no_schedules = self._create_postlog(network_deal_number='SPT-NOSUCHDEAL')
+        no_deal = self._create_postlog(network_deal_number=False)
+        no_date = self._create_postlog(air_date=False)
+
+        info = {
+            row['id']: row['info']
+            for row in self._search(status='no_suggestion')['rows']
+        }
+        self.assertEqual(info.get(no_schedules.id),
+                         'No schedules found for deal number')
+        self.assertEqual(info.get(no_deal.id), 'Missing deal number')
+        self.assertEqual(info.get(no_date.id), 'Missing air date')
+        # and none of them is blank, which is the regression this guards
+        self.assertTrue(all(info.values()), info)
 
     def test_apply_rejects_stale_filter_context(self):
         postlog = self._create_postlog()
@@ -454,16 +744,19 @@ class TestPostlogMatching(TransactionCase):
         self.assertEqual(row['suggested']['id'], overnight.id)
         self.assertEqual(row['match_quality'], 'exact')
 
-    def test_no_version_or_removed_surface(self):
+    def test_no_version_surface(self):
+        """A postlog is one upload per week, so `version` does not apply.
+
+        `removed` does, and this test used to assert its absence - see the
+        remove/restore tests above.
+        """
         self._create_postlog()
-        counts = self._search()['counts']
-        self.assertNotIn('removed', counts)
         self.assertEqual(
-            set(counts), {'all', 'matched', 'unmatched', 'suggestions', 'no_suggestion'},
+            set(self._search()['counts']),
+            {'all', 'matched', 'unmatched', 'suggestions', 'no_suggestion',
+             'removed'},
         )
-        options = self.Postlog.fuzzy_match_get_options()
-        self.assertNotIn('versions', options)
-        self.assertFalse(hasattr(self.Postlog, 'fuzzy_match_set_removed'))
+        self.assertNotIn('versions', self.Postlog.fuzzy_match_get_options())
 
     # ------------------------------------------------------------------
     # Filters, tabs, sorting, export
@@ -548,16 +841,15 @@ class TestPostlogMatching(TransactionCase):
         self.assertEqual(good.schedule, self.schedule)
         self.assertFalse(bad.schedule)
 
-    def test_bulk_action_rejects_dropped_remove_verbs(self):
-        """remove/unremove no longer exist and must not fall through to delete."""
+    def test_bulk_action_rejects_an_unknown_verb(self):
+        """An unrecognised action must not fall through to delete."""
         postlog = self._create_postlog()
-        for verb in ('remove', 'unremove'):
-            with self.assertRaises(UserError):
-                self.Postlog.fuzzy_workbench_bulk_action(
-                    verb,
-                    {'all_matching': False, 'ids': [postlog.id], 'excluded_ids': []},
-                    self.program.id, self.week.isoformat(),
-                )
+        with self.assertRaises(UserError):
+            self.Postlog.fuzzy_workbench_bulk_action(
+                'obliterate',
+                {'all_matching': False, 'ids': [postlog.id], 'excluded_ids': []},
+                self.program.id, self.week.isoformat(),
+            )
         self.assertTrue(postlog.exists())
 
     def test_bulk_delete_removes_rows_permanently(self):
@@ -646,10 +938,17 @@ class TestPostlogMatching(TransactionCase):
                 'spot_rate': 100.0,
                 'product': 'Bulk %s' % index,
                 'status': 'aired',
-                'import_match_status': 'created_without_schedule',
+                'import_match_status': 'unmatched',
             }
             for index in range(205)
         ])
+        # Bulk paths read stored matching now, so the fixture has to be in the
+        # state the import leaves rows in. Created straight through create(),
+        # these had no stored verdict at all - and the old bulk path silently
+        # re-analysed them, which is the behaviour this change removes.
+        self.Postlog._postlog_store_matching(
+            postlogs, self.program, self.week, attach=False,
+        )
         page = self._search()
         self.assertEqual(page['total'], 205)
         self.assertEqual(len(page['rows']), 200)
@@ -742,7 +1041,6 @@ class TestPostlogMatching(TransactionCase):
         row = self._search()['rows'][0]
         self.assertGreaterEqual(row['ambiguous_count'], 2)
         self.assertIn(row['suggested']['id'], (self.schedule.id, twin.id))
-        self.assertTrue(row['reason'])
 
         # the "Tied schedules" issue filter must surface it
         filtered = self._search(issue_filter='ambiguous')
@@ -763,7 +1061,7 @@ class TestPostlogMatching(TransactionCase):
                 'spot_rate': 100.0,
                 'product': 'Page %s' % index,
                 'status': 'aired',
-                'import_match_status': 'created_without_schedule',
+                'import_match_status': 'unmatched',
             }
             for index in range(205)
         ])
@@ -891,7 +1189,7 @@ class TestPostlogMatching(TransactionCase):
         )
         self.assertFalse(vals['air_date'])
         self.assertTrue(vals['import_match_detail'])
-        self.assertEqual(vals['import_match_status'], 'created_without_schedule')
+        self.assertEqual(vals['import_match_status'], 'unmatched')
         # the rest of the row still came through
         self.assertEqual(vals['network_deal_number'], 'SPT-100')
         self.assertEqual(vals['length'], 'v_60')
@@ -920,8 +1218,10 @@ class TestPostlogMatching(TransactionCase):
         self.assertEqual(vals['import_program'], self.program.id)
         self.assertEqual(vals['import_week_value'], self.week)
         self.assertEqual(vals['length'], 'v_30')
-        self.assertEqual(vals['import_match_status'], 'matched')
-        self.assertTrue(vals['schedule'])
+        # The engine no longer matches: rows are created unmatched and resolved
+        # by _postlog_store_matching once the whole batch exists.
+        self.assertEqual(vals['import_match_status'], 'unmatched')
+        self.assertFalse(vals['schedule'])
 
     # ---- access --------------------------------------------------------
 
@@ -931,6 +1231,240 @@ class TestPostlogMatching(TransactionCase):
         )
         with self.assertRaises(UserError):
             self.Postlog.with_user(user).fuzzy_match_get_options()
+
+    def test_engine_matches_when_deal_status_is_unset(self):
+        """A Salesforce-imported deal has no status; the import must still attach.
+
+        Regression for the 8/17 prod upload: requiring ``deal.status == 'sold'``
+        rejected every row at import, so each spot landed unattached and then
+        surfaced in the workbench as a fuzzy suggestion reading "Exact / Ready
+        to attach" - because the workbench matcher does not filter deal status.
+
+        Matching has since moved out of the engine into _postlog_store_matching,
+        so the guarantee is asserted there. Same rule, one layer down.
+        """
+        self.deal.status = False
+        self.assertFalse(self.deal.status)
+        postlog = self._create_postlog()
+
+        self.Postlog._postlog_store_matching(postlog, self.program, self.week)
+
+        self.assertEqual(postlog.schedule, self.schedule)
+        self.assertEqual(postlog.import_match_status, 'matched')
+
+    def test_alternatives_rank_by_how_many_checks_they_fail(self):
+        """One mismatch outranks two, whatever the mismatch happens to be.
+
+        Reported off the 8/17 drawer: a candidate differing only on day sat
+        BELOW one differing on time AND rate, because day was the first sort
+        term. An operator reads the list as "how close is this?", so the count
+        of failed checks leads and the severity terms only break ties.
+        """
+        day_only = self.env['mv.schedules'].create({     # right hours, wrong day
+            'deal_parent': self.deal.id, 'week': self.week,
+            'start_time': 'v_09_00a', 'end_time': 'v_10_00a',
+            'days_allowed': [Command.set(self.tuesday.ids)],
+            'rate': 100.0, 'status': 'sold',
+        })
+        time_and_rate = self.env['mv.schedules'].create({   # right day, wrong both
+            'deal_parent': self.deal.id, 'week': self.week,
+            'start_time': 'v_02_00a', 'end_time': 'v_03_00a',
+            'days_allowed': [Command.set(self.monday.ids)],
+            'rate': 555.0, 'status': 'sold',
+        })
+        self._create_postlog()                             # Mon 09:30, $100
+
+        row = self._search()['rows'][0]
+
+        # self.schedule matches on every check, so it stays the suggestion.
+        self.assertEqual(row['suggested']['id'], self.schedule.id)
+
+        alt_ids = [a['id'] for a in row['alternatives']]
+        self.assertIn(day_only.id, alt_ids)
+        self.assertIn(time_and_rate.id, alt_ids)
+        self.assertLess(
+            alt_ids.index(day_only.id), alt_ids.index(time_and_rate.id),
+            "a day-only mismatch must rank above a time+rate mismatch",
+        )
+
+    def test_alternatives_drop_candidates_with_three_or_more_differences(self):
+        """A runner-up has to be a near miss; 3+ failed checks is just noise.
+
+        A schedule that differs on day AND time AND rate is not a plausible
+        alternative - it is a different schedule that happens to share the deal
+        number. The suggestion itself is never dropped by the cap, or a row would
+        silently become no_suggestion.
+        """
+        near = self.env['mv.schedules'].create({        # 1 difference: day
+            'deal_parent': self.deal.id, 'week': self.week,
+            'start_time': 'v_09_00a', 'end_time': 'v_10_00a',
+            'days_allowed': [Command.set(self.tuesday.ids)],
+            'rate': 100.0, 'status': 'sold',
+        })
+        far = self.env['mv.schedules'].create({         # 3: day, time, rate
+            'deal_parent': self.deal.id, 'week': self.week,
+            'start_time': 'v_02_00a', 'end_time': 'v_03_00a',
+            'days_allowed': [Command.set(self.tuesday.ids)],
+            'rate': 555.0, 'status': 'sold',
+        })
+        self._create_postlog()                          # Mon 09:30, $100, :30
+
+        row = self._search()['rows'][0]
+
+        self.assertEqual(row['suggested']['id'], self.schedule.id)
+        alt_ids = [a['id'] for a in row['alternatives']]
+        self.assertIn(near.id, alt_ids, "a one-difference near miss must be offered")
+        self.assertNotIn(far.id, alt_ids, "a three-difference candidate must be dropped")
+
+
+    def test_refresh_attaches_rows_whose_schedule_was_corrected(self):
+        """Stored matching does not self-heal; Refresh is how a fix is picked up.
+
+        The row imports unmatched because the day is wrong. Someone corrects the
+        rotation. Nothing changes until Refresh runs, because the verdict is
+        stored - and then it attaches, because a clean match is attached the
+        same way the import would have attached it.
+        """
+        self.schedule.days_allowed = [Command.set(self.monday.ids)]
+        postlog = self._create_postlog(air_date=date(2026, 7, 28))       # Tuesday
+        self.assertFalse(postlog.schedule)
+        self.assertIn('day', postlog.match_flags)
+
+        # Correcting the Schedule alone changes nothing that is already stored.
+        self.schedule.days_allowed = [Command.link(self.tuesday.id)]
+        self.assertFalse(postlog.schedule)
+        self.assertIn('day', postlog.match_flags)
+
+        result = self.Postlog.fuzzy_match_refresh(self.program.id, self.week.isoformat())
+
+        self.assertEqual(result['checked'], 1)
+        self.assertEqual(result['attached'], 1)
+        self.assertEqual(postlog.schedule, self.schedule)
+        self.assertEqual(postlog.import_match_status, 'matched')
+        self.assertIn('Refresh', postlog.import_match_detail or '')
+
+    def test_refresh_never_touches_matched_rows(self):
+        """Unmatched-only, so Refresh cannot undo a human's attachment.
+
+        The manually attached row here is deliberately a poor match - if Refresh
+        re-ran matching over it, it would move the row somewhere else.
+        """
+        manual = self._create_postlog(
+            schedule=self.other_schedule.id, import_match_status='matched',
+        )
+        unmatched = self._create_postlog(spot_rate=999.0)
+        self.assertFalse(unmatched.schedule)
+
+        result = self.Postlog.fuzzy_match_refresh(self.program.id, self.week.isoformat())
+
+        self.assertEqual(result['checked'], 1, "only the unmatched row is re-checked")
+        self.assertEqual(manual.schedule, self.other_schedule)
+        self.assertEqual(manual.import_match_status, 'matched')
+
+    def test_detach_does_not_immediately_reattach(self):
+        """Detach re-analyses with attach=False, or it would undo itself.
+
+        The row was attached because it matched cleanly, so re-running the
+        matcher with attaching enabled would put the schedule straight back and
+        Detach would appear to do nothing.
+        """
+        postlog = self._create_postlog(
+            schedule=self.schedule.id, import_match_status='matched',
+        )
+
+        self.Postlog.fuzzy_match_detach(
+            [postlog.id], self.program.id, self.week.isoformat(),
+        )
+
+        self.assertFalse(postlog.schedule)
+        self.assertEqual(postlog.import_match_status, 'unmatched')
+        self.assertEqual(postlog.suggested_schedule, self.schedule,
+                         "it should still know what it would match")
+
+    def test_queueing_an_import_triggers_the_cron(self):
+        """The queue is for not blocking the request, not for adding latency.
+
+        The cron ticks once a minute, so a job queued just after a tick waited
+        nearly a full minute to start work that takes seconds. Creating a job
+        asks the cron to run now.
+        """
+        cron = self.env.ref('marathon_ventures.cron_mv_postlog_import_jobs')
+        Trigger = self.env['ir.cron.trigger']
+        before = Trigger.search_count([('cron_id', '=', cron.id)])
+
+        job = self.env['mv.postlog_import_job'].create({
+            'program_id': self.program.id,
+            'import_week': self.week,
+            'upload_filename': 'postlogs.xlsx',
+            'file_checksum': 'deadbeef',
+            'submitted_by_id': self.env.user.id,
+        })
+        job._trigger_cron()
+
+        self.assertEqual(
+            Trigger.search_count([('cron_id', '=', cron.id)]), before + 1,
+            "queueing an import should ask the cron to run now",
+        )
+
+    def test_refresh_without_filters_does_not_wipe_suggestions(self):
+        """Refresh must match against each row's own Program/week.
+
+        The workbench filters may be "All Programs" with no week. Passing those
+        into the matcher produced an empty candidate map, and every row was
+        re-stored as "no schedules found" - Refresh silently destroyed the
+        suggestions it was supposed to update.
+        """
+        postlog = self._create_postlog(spot_rate=999.0)
+        self.assertEqual(postlog.suggested_schedule, self.schedule)
+        self.assertTrue(postlog.possible_schedules)
+
+        result = self.Postlog.fuzzy_match_refresh(False, False)
+
+        # Unfiltered, so it sweeps every unmatched row in the database - the
+        # count is not the point, surviving the sweep is.
+        self.assertGreaterEqual(result['checked'], 1)
+        self.assertEqual(postlog.suggested_schedule, self.schedule,
+                         "the suggestion must survive an unfiltered Refresh")
+        self.assertTrue(postlog.possible_schedules)
+        self.assertNotIn('no_schedules', postlog.match_flags or '')
+
+    def test_refresh_attaches_every_row_blocked_by_one_schedule(self):
+        """Fixing one Schedule should clear every row it was blocking.
+
+        This is the workflow the in-drawer Refresh exists for: several postlogs
+        share a bad Schedule, you correct it once, and they all resolve together
+        rather than one review at a time.
+        """
+        self.schedule.days_allowed = [Command.set(self.monday.ids)]
+        blocked = self.Postlog.browse()
+        for minutes in ('09:30:00', '09:35:00', '09:40:00'):
+            blocked |= self._create_postlog(
+                air_date=date(2026, 7, 28), air_time=minutes,      # Tuesday
+            )
+        self.assertFalse(any(blocked.mapped('schedule')))
+        self.assertTrue(all('day' in (f or '') for f in blocked.mapped('match_flags')))
+
+        self.schedule.days_allowed = [Command.link(self.tuesday.id)]
+        result = self.Postlog.fuzzy_match_refresh(self.program.id, self.week.isoformat())
+
+        self.assertEqual(result['attached'], 3)
+        self.assertTrue(all(row.schedule == self.schedule for row in blocked))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 @tagged('post_install', '-at_install')

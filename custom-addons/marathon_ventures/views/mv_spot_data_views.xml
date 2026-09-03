@@ -13,6 +13,7 @@
         <field name="air_date"/>
         <field name="air_time"/>
         <field name="availability"/>
+        <field name="removed"/>
       </list>
     </field>
   </record>
@@ -36,6 +37,7 @@
                 <field name="station"/>
                 <field name="length"/>
                 <field name="status"/>
+                <field name="removed"/>
                 <field name="air_date"/>
                 <field name="spot_week"/>
                 <field name="air_date_time"/>
@@ -112,6 +114,13 @@
       <search string="Spot Data">
         <field name="name"/>
         <field name="sf_external_id"/>
+        <!-- Removal exists so reporting can exclude duplicate and bonus spots.
+             That only works if it is reachable from outside the Postlog
+             Workbench, which is what these two filters are for. -->
+        <filter name="not_removed" string="Reconciling"
+                domain="[('removed', '=', False)]"/>
+        <filter name="removed" string="Removed"
+                domain="[('removed', '=', True)]"/>
       </search>
     </field>
   </record>

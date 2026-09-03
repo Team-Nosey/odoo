@@ -7,6 +7,7 @@ import logging
 import re
 from odoo import models, fields, api, _
 from odoo.exceptions import ValidationError
+from odoo.tools.sql import create_index
 
 _logger = logging.getLogger(__name__)
 
@@ -85,26 +86,110 @@ class MvSpotData(models.Model):
     time_period = fields.Char(string='Time Period', size=255)  # SF: Time_Period__c
     x800 = fields.Char(string='800 #', size=100)  # SF: X800__c
 
+    # Duplicate or bonus spots that must not reconcile: airings that are in the
+    # log but should not be counted against a deal. Set from the Postlog
+    # Workbench, and removing a spot always clears its attached Schedule - a
+    # duplicate holding an attachment would double-count.
+    #
+    # A property of the spot, not of the workbench, which is why it sits here
+    # and not in the workbench block below: reporting has to be able to filter
+    # these out, and none of that code goes through the workbench. No SF
+    # counterpart on Spot Data (prelog's is `Removed__c` on its own object).
+    removed = fields.Boolean(string='Removed', index=True)
+
     # === Postlog Workbench fields (mirrors mv.prelog_data) ===
     # Plain indexed fields written by the Postlog import. Deliberately separate
     # from the generated `program` Char (which holds the show name, e.g.
     # "NEW DETECTIVES") and from the stubbed `spot_week` compute.
-    # NOTE: there is no `version` / `removed` here - a postlog is one upload per
-    # week of what actually aired, so neither concept applies.
+    # NOTE: there is no `version` here - a postlog is one upload per week of
+    # what actually aired, so the concept does not apply. `removed` does apply,
+    # but describes the spot rather than the workbench, so it is declared with
+    # the spot's own fields above.
 
     import_job = fields.Many2one(string='Import Job', comodel_name='mv.postlog_import_job', ondelete='set null', index=True)
     import_program = fields.Many2one(string='Import Program', comodel_name='mv.programs', ondelete='restrict', index=True)
     import_week_value = fields.Date(string='Import Week', index=True)
+    # Stored, never computed on the fly: the workbench reads this rather than
+    # re-deriving it per request. Two codes only - `failed_to_create` was
+    # declared but never written, and could not be: a row that fails to be
+    # created has no record to carry a status. Those land in the import job's
+    # error_count and the errors CSV instead.
     import_match_status = fields.Selection(
         string='Import Match Status',
         selection=[
             ('matched', 'Matched'),
-            ('created_without_schedule', 'Created Without Schedule'),
-            ('failed_to_create', 'Failed to Create'),
+            ('unmatched', 'Unmatched'),
         ],
+        index=True,
     )
     import_match_detail = fields.Text(string='Import Match Detail')
     batch_id = fields.Char(string='Batch', size=255)
+
+    # === Stored match results, written by the Postlog import ===
+    # The import does the matching once; the workbench displays it. Nothing here
+    # is recomputed on page load, so a schedule edited after import does NOT
+    # update these - that is a deliberate trade for page speed.
+    #
+    # `suggested_schedule` is the indexed handle on possible_schedules[0]. It is
+    # not displayed (the Schedule column shows only real attachments) but it is
+    # what makes the Suggestions / No Suggestion tabs plain domains and what bulk
+    # Attach writes from, instead of parsing JSON per row.
+    suggested_schedule = fields.Many2one(
+        string='Suggested Schedule', comodel_name='mv.schedules',
+        ondelete='set null', index=True,
+    )
+    # Ordered, best first; index 0 is the suggestion. Populated ONLY for
+    # unmatched rows - a matched row's drawer shows the attachment, never the
+    # candidate list, and storing it for every row would cost ~2 MB per week of
+    # JSON nobody reads. Cleared on manual attach.
+    possible_schedules = fields.Json(string='Possible Schedules')
+    # Comma-sentinelled tokens, e.g. ',time,rate,' - so ilike '%,time,%' is an
+    # exact-token match and cannot also hit 'time_buffer'. Drives the issue
+    # dropdown. Vocabulary: day, time, time_buffer, rate, length, ambiguous,
+    # missing_deal, no_schedules. NULL means "never analysed" (rows that predate
+    # stored matching), which is distinct from '' meaning "analysed, no issues".
+    match_flags = fields.Char(string='Match Flags', size=255, index=True)
+    # Free display text for the workbench INFO column. Deliberately general -
+    # currently a suggestion count for unmatched rows, blank for matched - so it
+    # can carry non-matching notes later without another field.
+    info = fields.Char(string='Info', size=255)
+
+    # Composite indexes for the Postlog Workbench. The ORM builds the
+    # single-column ones for every field marked index=True; these are the
+    # multi-column and partial ones it cannot express.
+    #
+    # Declared here rather than only in a post-migration: migrations do not run
+    # on install, so a freshly created database - a new staging box, a rebuilt
+    # environment - silently had none of these while an upgraded one had all
+    # three. init() runs on both paths, and create_index is a no-op when the
+    # index already exists.
+    _POSTLOG_WORKBENCH_INDEXES = (
+        # Fronts every workbench request.
+        (
+            'mv_spot_data_workbench_filter_idx',
+            ['import_program', 'import_week_value', 'import_match_status'],
+            '',
+        ),
+        # The Suggestions / No Suggestion tabs: unmatched rows split by whether
+        # a suggestion exists. Partial, because matched rows are the large
+        # majority and are never queried this way.
+        (
+            'mv_spot_data_suggestion_idx',
+            ['import_program', 'import_week_value', 'suggested_schedule'],
+            "import_match_status = 'unmatched'",
+        ),
+        # Default ordering of the list.
+        (
+            'mv_spot_data_airdate_order_idx',
+            ['air_date', 'air_time', 'id'],
+            '',
+        ),
+    )
+
+    def init(self):
+        super().init()
+        for name, columns, where in self._POSTLOG_WORKBENCH_INDEXES:
+            create_index(self.env.cr, name, self._table, columns, where=where)
 
     # === Computed / Roll-Up ===
 

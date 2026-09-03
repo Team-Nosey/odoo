@@ -77,8 +77,7 @@ class PostlogImportEngine:
     # Mirrors PrelogImportEngine's status vocabulary so both jobs report the
     # same three outcomes into `import_match_status`.
     _MATCHED = "matched"
-    _CREATED_WITHOUT_SCHEDULE = "created_without_schedule"
-    _FAILED_TO_CREATE = "failed_to_create"
+    _UNMATCHED = "unmatched"
 
     def __init__(self, env, *, program, upload_file, upload_filename):
         self.env = env
@@ -195,26 +194,14 @@ class PostlogImportEngine:
             else self._safe_optional_value("broadcast_network", row.get("broadcast_network"), parse_errors)
         )
 
-        schedule, match_detail = self._match_schedule(
-            network=(
-                selected_program_name
-                if self.config.get("useProgramForNetwork")
-                else self._safe_optional_value("network", row.get("network"), parse_errors) or selected_program_name
-            ),
-            network_deal_number=network_deal_number,
-            air_date=air_date,
-            air_time=air_time,
-            length=length,
-            spot_rate=spot_rate,
-            import_week=import_week,
-        )
-
+        # Matching moved out of the engine. mv.spot_data._postlog_store_matching
+        # runs once over the whole batch after the rows exist, so there is a
+        # single matcher deciding both attachment and suggestions. The row is
+        # created unmatched and the job resolves it a moment later.
         detail_parts = list(parse_errors)
-        if match_detail:
-            detail_parts.append(match_detail)
 
         return {
-            "schedule": schedule.id if schedule else False,
+            "schedule": False,
             "air_date": air_date,
             "air_time": air_time,
             "length": length,
@@ -239,7 +226,7 @@ class PostlogImportEngine:
             "batch_id": self.upload_filename or False,
             "import_program": self.program.id if self.program else False,
             "import_week_value": import_week,
-            "import_match_status": self._MATCHED if schedule else self._CREATED_WITHOUT_SCHEDULE,
+            "import_match_status": self._UNMATCHED,
             "import_match_detail": "; ".join(part for part in detail_parts if part) or False,
         }
 
@@ -451,10 +438,20 @@ class PostlogImportEngine:
         if not network_deal_number:
             return False, "Missing network deal number."
 
+        # NOTE 2026-09-01: deal status filter commented out, not deleted.
+        # Deals imported from Salesforce have no `status` set, so requiring
+        # "sold" here rejected every row at import: the spot landed unattached
+        # and then showed up in the workbench as a fuzzy suggestion reading
+        # "Exact / Ready to attach", because the workbench matcher does not
+        # filter deal status at all. PrelogImportEngine does not filter it
+        # either. Revisit once we decide whether mv.deal.status is a field we
+        # keep and backfill - if we keep it, re-enable this AND add the same
+        # filter to the workbench matcher so the two agree. Schedule status is
+        # still required to be "sold" below, same as prelog.
         deals = self.env["mv.deal"].search(
             [
                 ("network_deal_number", "=", network_deal_number),
-                ("status", "=", "sold"),
+                # ("status", "=", "sold"),
             ],
             order="id",
         )

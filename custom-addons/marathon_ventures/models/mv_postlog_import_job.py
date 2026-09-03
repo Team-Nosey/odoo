@@ -141,7 +141,35 @@ class MvPostlogImportJob(models.Model):
                 "notification_email": user_email,
             }
         )
+        job._trigger_cron()
         return job, True
+
+    def _trigger_cron(self):
+        """Ask the cron to run now instead of on its next tick.
+
+        The queue exists so the request returns immediately - a 20k-row bundle
+        would otherwise block an HTTP worker past its timeout. But the cron ticks
+        once a minute, so a job queued just after a tick waited nearly a full
+        minute before starting, for work that takes ~13 seconds. The operator
+        watched an empty screen for the difference.
+
+        Best effort: if the trigger fails the job simply starts on the next tick,
+        which is the behaviour we had before.
+        """
+        cron = self.env.ref(
+            "marathon_ventures.cron_mv_postlog_import_jobs",
+            raise_if_not_found=False,
+        )
+        if not cron:
+            return
+        try:
+            cron.sudo()._trigger()
+        except Exception:
+            _logger.exception(
+                "Postlog import job %s: cron trigger failed; the job stays "
+                "queued and will run on the next tick.",
+                self.ids,
+            )
 
     @api.model
     def _cron_process_postlog_import_jobs(self):
@@ -206,13 +234,13 @@ class MvPostlogImportJob(models.Model):
 
         success_rows = []
         error_rows = []
-        matched_count = 0
-        unmatched_count = 0
+        created = []
         error_count = 0
         total_rate_amount = 0.0
-        matched_rate_amount = 0.0
-        unmatched_rate_amount = 0.0
 
+        # Phase 1: parse and create. No matching happens here - the rows are
+        # created unmatched and resolved in one pass below, so a single matcher
+        # decides both attachment and suggestions.
         for row_index, row in enumerate(rows, start=engine._first_data_row_number()):
             vals = False
             rate_added = False
@@ -224,15 +252,7 @@ class MvPostlogImportJob(models.Model):
                 rate_added = True
                 with self.env.cr.savepoint():
                     postlog = self.env["mv.spot_data"].create(vals)
-
-                if vals["import_match_status"] == "matched":
-                    matched_count += 1
-                    matched_rate_amount += rate_value
-                    success_rows.append(self._build_success_csv_row(engine, postlog, row, vals))
-                else:
-                    unmatched_count += 1
-                    unmatched_rate_amount += rate_value
-                    error_rows.append(self._build_error_csv_row(engine, row, vals, status="no-match"))
+                created.append((postlog, row, vals, rate_value))
             except Exception as exc:
                 _logger.exception("Postlog Data import job %s row %s failed.", self.id, row_index)
                 error_count += 1
@@ -243,6 +263,35 @@ class MvPostlogImportJob(models.Model):
                         total_rate_amount += float(rate_value or 0.0)
                     except (TypeError, ValueError):
                         pass
+
+        # Phase 2: match everything this job created, in one pass. The candidate
+        # schedules are fetched once for the week rather than once per row.
+        postlogs = self.env["mv.spot_data"].browse([record.id for record, _r, _v, _rate in created])
+        if postlogs:
+            self.env["mv.spot_data"]._postlog_store_matching(
+                postlogs, self.program_id, self.import_week,
+            )
+
+        # Reporting reads the resolved rows, not the pre-match vals, because the
+        # verdict does not exist until phase 2 has run.
+        matched_count = 0
+        unmatched_count = 0
+        matched_rate_amount = 0.0
+        unmatched_rate_amount = 0.0
+        for postlog, row, vals, rate_value in created:
+            if postlog.schedule:
+                matched_count += 1
+                matched_rate_amount += rate_value
+                success_rows.append(self._build_success_csv_row(engine, postlog, row, vals))
+            else:
+                unmatched_count += 1
+                unmatched_rate_amount += rate_value
+                error_rows.append(self._build_error_csv_row(
+                    engine,
+                    row,
+                    dict(vals or {}, import_match_detail=self._match_failure_detail(postlog)),
+                    status="no-match",
+                ))
 
         attachments = self._create_result_attachments(
             engine=engine,
@@ -411,6 +460,27 @@ class MvPostlogImportJob(models.Model):
         for row in rows:
             writer.writerow(row)
         return buffer.getvalue().encode("utf-8")
+
+    @staticmethod
+    def _match_failure_detail(postlog):
+        """Why this row was not attached, for the errors CSV.
+
+        Reads the stored flags rather than a message threaded through from the
+        matcher, so the CSV and the workbench can never disagree about why.
+        """
+        flags = [token for token in (postlog.match_flags or '').split(',') if token]
+        if 'missing_deal' in flags:
+            return "Missing deal number."
+        if 'no_schedules' in flags:
+            return "No sold schedule matched network deal number %s." % (
+                postlog.network_deal_number or '?'
+            )
+        if postlog.suggested_schedule:
+            return "Best suggestion %s differs on: %s." % (
+                postlog.suggested_schedule.display_name,
+                ', '.join(f for f in flags if f != 'ambiguous') or 'nothing',
+            )
+        return "No schedule matched."
 
     def _build_success_csv_row(self, engine, postlog, raw_row, vals):
         row = {
