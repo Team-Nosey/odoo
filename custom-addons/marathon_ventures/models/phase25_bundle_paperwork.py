@@ -1174,6 +1174,58 @@ class MvBundlePaperworkWizard(models.TransientModel):
         )
         group_label_map = dict(group_selection)
 
+        # ================================================================
+        # Pre-computed lookups so the Order sheet can be SELF-CONTAINED.
+        #
+        # Requirement: the delivered workbook must contain ONLY the
+        # "Order" tab. Three Order cells used to be cross-sheet
+        # formulas, which would resolve to #REF! the moment their source
+        # sheet is removed:
+        #
+        #   A  No. of Stations  <- COUNTIF('Station List'!B, <group>)
+        #   G  Station Rate     <- SUMIF('Station List'!E, C<row>, ..G)
+        #   K..X Weekly units   <- SUMIF(Sheet2!A, <monday>, Sheet2!M)
+        #
+        # We therefore evaluate them here, in Python, against the same
+        # data the helper sheets were built from, and write literal
+        # values into Order. Intra-sheet formulas (H, I, J, the totals)
+        # are untouched - they only reference Order itself, so they keep
+        # recalculating live in Excel.
+        # ================================================================
+
+        # 1. Weekly units per Monday - mirrors Sheet2 column M, which is
+        #    =SUM(K,L) = units_aired + bonus units, summed per week.
+        weekly_units_by_monday = {}
+        for ch in chunks:
+            for sc in ch.schedules:
+                if not sc.week:
+                    continue
+                total = _sched_units(sc) + float(sc.bpu_units or 0)
+                weekly_units_by_monday[sc.week] = (
+                    weekly_units_by_monday.get(sc.week, 0.0) + total
+                )
+
+        # 2. Sum of Rate per :30 keyed by Time Period text - mirrors
+        #    SUMIF('Station List'!E, <period>, 'Station List'!G).
+        # 3. Count of Station List rows per Group label - mirrors
+        #    COUNTIF('Station List'!B, <group label>).
+        rate_by_period = {}
+        rows_by_group_label = {}
+        for _call, station in stations.items():
+            for bp in station.pricing_list:
+                period_txt = '%s-%s' % (
+                    _time_label(bp.start_time, time_map),
+                    _time_label(bp.end_time, time_map),
+                )
+                rate_by_period[period_txt] = (
+                    rate_by_period.get(period_txt, 0.0)
+                    + float(bp.rate_per_30 or 0.0)
+                )
+                label = group_label_map.get(bp.group, bp.group or '')
+                rows_by_group_label[label] = (
+                    rows_by_group_label.get(label, 0) + 1
+                )
+
         # Group codes present on this deal, in the order the group
         # selection defines them (Group 1, Group 2, ...). Group them
         # once - we need both the list of groups AND the list of
@@ -1337,6 +1389,14 @@ class MvBundlePaperworkWizard(models.TransientModel):
             ]
             n_periods = len(periods)
 
+            # No. of Stations for this group, evaluated up-front because
+            # the Station Rate (col G) divides by it. Mirrors the old
+            # ROUND(COUNTIF('Station List'!B,<group>)/n_periods,0).
+            _grp_rows = int(rows_by_group_label.get(group_label, 0))
+            _stations_for_group = (
+                int(round(_grp_rows / n_periods)) if n_periods else 0
+            )
+
             r_head       = cur_row                # "GROUP N"
             r_columns    = cur_row + 1            # column headers
             r_data_first = cur_row + 2            # first data row
@@ -1408,13 +1468,18 @@ class MvBundlePaperworkWizard(models.TransientModel):
                 # Uses the row's Time Period text to match the Station
                 # List's Start/End Time column directly (no Concat/
                 # Multiplier round-trip).
+                # Literal: (sum of Rate per :30 for this Time Period)
+                #          * (length / 30) / No. of Stations
+                # Replaces the SUMIF against the Station List sheet.
+                _period_rate = float(rate_by_period.get(period, 0.0))
+                _station_rate = 0.0
+                if _stations_for_group:
+                    _station_rate = (
+                        _period_rate * (float(length_int or 0) / 30.0)
+                    ) / _stations_for_group
                 order.cell(
                     row=data_row, column=7,
-                    value=(
-                        "=IFERROR((SUMIF('Station List'!E2:E500,C%(r)d,"
-                        "'Station List'!G2:G500)*(E%(r)d/30))/A%(stations)d,0)"
-                        % {'r': data_row, 'stations': r_data_first}
-                    ),
+                    value=round(_station_rate, 2),
                 )
                 # H: Group Rate = G * <No. of Stations>
                 order.cell(
@@ -1435,28 +1500,24 @@ class MvBundlePaperworkWizard(models.TransientModel):
                 # Only emit a formula for columns that actually carry a
                 # week header - a 13-week quarter leaves X empty, and a
                 # SUMIF against a blank key would render a stray 0.
+                # Literal per-week totals, looked up by that column's
+                # Monday. Replaces the SUMIF against Sheet2.
                 for offset in range(week_col_count):
                     col = 11 + offset
-                    col_letter = get_column_letter(col)
+                    monday = week_mondays[offset]
                     order.cell(
                         row=data_row, column=col,
-                        value=(
-                            "=IFERROR(SUMIF(Sheet2!$A:$A,%s$%d,"
-                            "Sheet2!$M:$M),0)"
-                            % (col_letter, r_columns)
-                        ),
+                        value=weekly_units_by_monday.get(monday, 0),
                     )
 
             # Col A first-data-row = No. of Stations. IFERROR keeps
             # divide-by-zero out of the header SUM when the Station
             # List is empty.
+            # Literal (computed above) instead of a COUNTIF against the
+            # Station List sheet, so it survives that sheet's removal.
             order.cell(
                 row=r_data_first, column=1,
-                value=(
-                    "=IFERROR(ROUND(COUNTIF("
-                    "'Station List'!B2:B500,\"%s\")/%d,0),0)"
-                    % (group_label, n_periods)
-                ),
+                value=_stations_for_group,
             ).font = bold
             block_no_of_stations_cells.append('A%d' % r_data_first)
 
@@ -1687,6 +1748,24 @@ class MvBundlePaperworkWizard(models.TransientModel):
             qs.cell(row=2 + i, column=2, value=quarter_start)
         qs.column_dimensions['A'].width = 14
         qs.column_dimensions['B'].width = 16
+
+        # ================================================================
+        # Deliver ONLY the "Order" tab.
+        #
+        # The helper sheets above are still built, because the Order
+        # sheet's layout is derived from the same data and keeping them
+        # makes the two easy to compare while developing. They are
+        # dropped here, immediately before saving.
+        #
+        # This is safe ONLY because every Order cell that used to point
+        # at 'Station List' or Sheet2 is now a Python-computed literal
+        # (see the pre-computed lookups near the top of this method).
+        # If you ever re-introduce a cross-sheet formula in Order, it
+        # will become #REF! at this point.
+        # ================================================================
+        for sheet_name in list(wb.sheetnames):
+            if sheet_name != 'Order':
+                del wb[sheet_name]
 
         buf = io.BytesIO()
         wb.save(buf)

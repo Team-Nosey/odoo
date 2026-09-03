@@ -151,7 +151,13 @@
                 <tr t-foreach="state.rows" t-as="row" t-key="row.id" t-att-class="isSelected(row) ? 'is-selected' : ''">
                   <td class="mv-fuzzy__check"><input type="checkbox" t-att-checked="isSelected(row)" t-on-change="(ev) => this.toggleRow(row, ev)"/></td>
                   <td><span t-att-class="statusBadge(row)" t-esc="row.status_label"/></td>
-                  <td><button class="mv-fuzzy__record-link" t-on-click="() => this.openDrawer(row)" t-esc="row.name"/></td>
+                  <!-- Prelog name opens the full record in a NEW tab.
+                       The review drawer is still one click away via the
+                       Review button in the Details column, so no
+                       behaviour is lost. -->
+                  <td><a class="mv-fuzzy__record-link" target="_blank" rel="noopener"
+                         t-att-href="prelogOpenUrl(row)"
+                         t-on-click.stop="() => {}" t-esc="row.name"/></td>
                   <td t-esc="row.network"/>
                   <td><t t-esc="row.air_date"/> <span class="mv-fuzzy__muted"><t t-esc="row.day"/> · <t t-esc="row.air_time"/></span></td>
                   <td t-att-class="row.length_mismatch ? 'mv-fuzzy__text-warning' : ''" t-esc="row.length"/>
@@ -160,15 +166,17 @@
                   <td><span class="mv-fuzzy__advertiser-product" t-att-title="row.advertiser_product" t-esc="row.advertiser_product"/></td>
                   <td>
                     <t t-if="row.attached">
-                      <button class="mv-fuzzy__record-link mv-fuzzy__linklike"
-                              t-on-click.stop="() => this.openSchedule(row.attached)" t-esc="row.attached.name"/>
+                      <a class="mv-fuzzy__record-link" target="_blank" rel="noopener"
+                         t-att-href="scheduleOpenUrl(row.attached)"
+                         t-on-click.stop="() => {}" t-esc="row.attached.name"/>
                       <span t-if="row.attached.overrun_amount > 0"
                             class="mv-fuzzy__overrun-badge"
                             t-att-title="'Schedule is over capacity by ' + row.attached.overrun_amount + ' unit(s)'">+<t t-esc="row.attached.overrun_amount"/></span>
                     </t>
                     <t t-elif="row.suggested">
-                      <button class="mv-fuzzy__record-link mv-fuzzy__linklike"
-                              t-on-click.stop="() => this.openSchedule(row.suggested)" t-esc="row.suggested.name"/>
+                      <a class="mv-fuzzy__record-link" target="_blank" rel="noopener"
+                         t-att-href="scheduleOpenUrl(row.suggested)"
+                         t-on-click.stop="() => {}" t-esc="row.suggested.name"/>
                       <span t-if="row.suggested.overrun_amount > 0"
                             class="mv-fuzzy__overrun-badge"
                             t-att-title="'Schedule would overrun by ' + row.suggested.overrun_amount + ' unit(s) if all pending suggestions attach'">+<t t-esc="row.suggested.overrun_amount"/></span>
@@ -215,8 +223,9 @@
               <span class="mv-fuzzy__quality mv-fuzzy__quality--fuzzy" t-if="state.drawerRow.status === 'suggestion' and state.drawerRow.match_quality === 'fuzzy'">Fuzzy</span>
             </h3>
             <t t-set="schedule" t-value="state.drawerRow.attached or state.drawerRow.suggested"/>
-            <dl class="mv-fuzzy__details"><dt>Name</dt><dd><button class="mv-fuzzy__record-link mv-fuzzy__linklike"
-              t-on-click.stop="() => this.openSchedule(schedule)" t-esc="schedule.name"/></dd>
+            <dl class="mv-fuzzy__details"><dt>Name</dt><dd><a class="mv-fuzzy__record-link"
+              target="_blank" rel="noopener" t-att-href="scheduleOpenUrl(schedule)"
+              t-on-click.stop="() => {}" t-esc="schedule.name"/></dd>
               <dt>Rotation</dt><dd t-esc="schedule.time_range or '—'"/><dt>Days</dt><dd t-esc="schedule.days_allowed or '—'"/>
               <dt>Length / Rate</dt><dd><t t-esc="schedule.length"/> · $<t t-esc="formatRate(schedule.rate)"/></dd><dt>Deal #</dt><dd t-esc="schedule.deal_number"/>
             </dl>
@@ -264,7 +273,8 @@
           </section>
 
           <section><h3>Record actions</h3>
-            <button class="btn btn-outline-secondary w-100 mb-2" t-on-click="() => this.openPrelog(state.drawerRow)"><i class="fa fa-external-link me-1"/>Open Full Prelog Record</button>
+            <a class="btn btn-outline-secondary w-100 mb-2" target="_blank" rel="noopener"
+               t-att-href="prelogOpenUrl(state.drawerRow)"><i class="fa fa-external-link me-1"/>Open Full Prelog Record</a>
             <button class="btn btn-outline-danger w-100" t-if="state.drawerRow.status !== 'removed'" t-on-click="() => this.setRemoved(true, state.drawerRow)" t-att-disabled="state.mutating"><i class="fa fa-ban me-1"/>Remove Prelog Data</button>
             <button class="btn btn-outline-success w-100" t-if="state.drawerRow.status === 'removed'" t-on-click="() => this.setRemoved(false, state.drawerRow)" t-att-disabled="state.mutating"><i class="fa fa-undo me-1"/>Unremove Prelog Data</button>
             <button class="btn btn-danger w-100 mt-2" t-on-click="() => this.deleteSelected(state.drawerRow)" t-att-disabled="state.mutating"><i class="fa fa-trash me-1"/>Permanently Delete Prelog Data</button>

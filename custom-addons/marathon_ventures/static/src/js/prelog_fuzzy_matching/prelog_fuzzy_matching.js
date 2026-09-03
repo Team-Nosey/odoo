@@ -527,29 +527,19 @@ export class MvPrelogFuzzyMatching extends Component {
         }[this.state.activeTab] || "All";
     }
 
-    async openPrelog(row) {
-        await this.action.doAction({
-            type: "ir.actions.act_window", name: row.name, res_model: "mv.prelog_data",
-            res_id: row.id, views: [[false, "form"]], target: "current",
-        });
-    }
+    // ---- Record URLs, for opening in a NEW browser tab -----------
+    // Action-based form (/odoo/action-<module>.<xmlid>/<res_id>) rather
+    // than the bare /odoo/<model>/<id> form: the latter loads a
+    // chrome-less page with no top menu, which is what we hit before.
+    // Routing via the action makes the web client resolve the action
+    // AND its menu, so the new tab looks like a normal Odoo screen.
     scheduleOpenUrl(schedule) {
         if (!schedule?.id) return "#";
-        return `/odoo/mv.schedules/${schedule.id}`;
+        return `/odoo/action-marathon_ventures.action_mv_schedules/${schedule.id}`;
     }
-    async openSchedule(schedule) {
-        // Open the schedule form THROUGH the action service so the web
-        // client keeps its top menu / breadcrumbs. A raw href to
-        // /odoo/mv.schedules/<id> loads a chrome-less standalone page.
-        if (!schedule?.id) return;
-        await this.action.doAction({
-            type: "ir.actions.act_window",
-            name: schedule.name || "Schedule",
-            res_model: "mv.schedules",
-            res_id: schedule.id,
-            views: [[false, "form"]],
-            target: "current",
-        });
+    prelogOpenUrl(row) {
+        if (!row?.id) return "#";
+        return `/odoo/action-marathon_ventures.action_mv_prelog_data/${row.id}`;
     }
     async viewAllOverrunPrelogs() {
         // Open a proper list action of every prelog tied to this
