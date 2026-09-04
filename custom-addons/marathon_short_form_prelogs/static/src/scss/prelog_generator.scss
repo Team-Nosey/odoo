@@ -1,0 +1,7 @@
+.o_list_renderer .o_data_row:not(.o_selected_row) {
+    .o_data_cell.o_prelog_include_checkbox_cell
+        > .o_field_widget:not(.o_readonly_modifier)
+        .form-check {
+        pointer-events: auto;
+    }
+}
