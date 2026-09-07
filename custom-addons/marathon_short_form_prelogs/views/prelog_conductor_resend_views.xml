@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_mv_prelog_conductor_resend_confirm_form" model="ir.ui.view">
+        <field name="name">mv.prelog.conductor.resend.confirm.form</field>
+        <field name="model">mv.prelog.conductor.resend.confirm</field>
+        <field name="arch" type="xml">
+            <form string="Confirm Prelog Resend" create="false" delete="false">
+                <sheet>
+                    <div class="alert alert-warning" role="alert">
+                        <strong>These prelogs have already been sent.</strong>
+                        Confirm that you want to send them again.
+                    </div>
+                    <group>
+                        <field name="recipient_count" readonly="1" string="Total Emails"/>
+                        <field name="resend_count" readonly="1" string="Previously Sent"/>
+                    </group>
+                    <field name="recipient_ids" invisible="1"/>
+                    <field name="resend_recipient_ids" nolabel="1">
+                        <list create="false" delete="false">
+                            <field name="contact_id"/>
+                            <field name="email"/>
+                            <field name="network_id"/>
+                            <field name="week"/>
+                            <field name="version"/>
+                            <field name="duplicate_of_id" string="Previous Send"/>
+                        </list>
+                    </field>
+                </sheet>
+                <footer>
+                    <button name="action_confirm_resend" string="Resend Prelogs" type="object" class="btn-primary"/>
+                    <button string="Cancel" special="cancel" class="btn-secondary"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+</odoo>

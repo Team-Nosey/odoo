@@ -11,7 +11,7 @@ from odoo.tools import format_date
 
 class MvPrelogConductorWeekOption(models.TransientModel):
     _name = "mv.prelog.conductor.week.option"
-    _description = "Prelog Conductor Week Option"
+    _description = "Prelog Generator Week Option"
     _order = "week desc"
 
     name = fields.Char(required=True)
@@ -26,7 +26,7 @@ class MvPrelogConductorWeekOption(models.TransientModel):
 
 class MvPrelogConductorVersionOption(models.TransientModel):
     _name = "mv.prelog.conductor.version.option"
-    _description = "Prelog Conductor Version Option"
+    _description = "Prelog Generator Version Option"
     _order = "version desc"
 
     name = fields.Char(required=True)
@@ -41,7 +41,7 @@ class MvPrelogConductorVersionOption(models.TransientModel):
 
 class MvPrelogConductorWizard(models.TransientModel):
     _name = "mv.prelog.conductor.wizard"
-    _description = "Prelog Conductor"
+    _description = "Prelog Generator"
 
     network_id = fields.Many2one(
         "mv.programs",
@@ -93,14 +93,14 @@ class MvPrelogConductorWizard(models.TransientModel):
         self.ensure_one()
         return {
             "type": "ir.actions.act_window",
-            "name": _("Prelog Conductor"),
+            "name": _("Prelog Generator"),
             "res_model": self._name,
             "res_id": self.id,
             "view_mode": "form",
             "view_id": self.env.ref(
                 "marathon_short_form_prelogs.view_mv_prelog_conductor_wizard_form"
             ).id,
-            "target": "current",
+            "target": "main",
         }
 
     @api.onchange("network_id")
@@ -173,7 +173,7 @@ class MvPrelogConductorWizard(models.TransientModel):
             grouped_ids[prelog.schedule.deal_parent.contact.id].append(prelog.id)
 
         contacts = self.env["res.partner"].browse(grouped_ids.keys()).exists()
-        existing_lines = self.env["mv.prelog.conductor.recipient"].search(
+        previous_sends = self.env["mv.prelog.conductor.recipient"].search(
             [
                 ("network_id", "=", self.network_id.id),
                 ("week", "=", self.week),
@@ -182,14 +182,14 @@ class MvPrelogConductorWizard(models.TransientModel):
                 (
                     "status",
                     "in",
-                    ["pending", "processing", "prepared", "queued", "sent"],
+                    ["queued", "sent"],
                 ),
             ],
             order="id desc",
         )
-        existing_by_contact = {}
-        for line in existing_lines:
-            existing_by_contact.setdefault(line.contact_id.id, line)
+        previous_send_by_contact = {}
+        for line in previous_sends:
+            previous_send_by_contact.setdefault(line.contact_id.id, line)
 
         batch = self.env["mv.prelog.conductor.batch"].create(
             {
@@ -197,6 +197,7 @@ class MvPrelogConductorWizard(models.TransientModel):
                 "week": self.week,
                 "version": self.version,
                 "requested_by_id": self.env.user.id,
+                "ready_notification_requested": True,
             }
         )
 
@@ -204,37 +205,52 @@ class MvPrelogConductorWizard(models.TransientModel):
         for contact in contacts.sorted(lambda partner: partner.display_name or ""):
             account = contact.parent_id
             email = (contact.email or "").strip()
-            existing = existing_by_contact.get(contact.id)
+            previous_send = previous_send_by_contact.get(contact.id)
             vals = {
                 "batch_id": batch.id,
                 "contact_id": contact.id,
                 "account_id": account.id if account else False,
                 "email": email or False,
-                "included": bool(email) and not existing,
+                "included": bool(email),
                 "prelog_ids": [Command.set(grouped_ids[contact.id])],
                 "prelog_count": len(grouped_ids[contact.id]),
                 "email_subject": self._email_subject(contact, account),
                 "email_body": self._email_body(),
+                "is_resend": bool(previous_send),
+                "duplicate_of_id": previous_send.id if previous_send else False,
             }
-            if existing:
-                vals.update(
-                    {
-                        "status": "duplicate",
-                        "duplicate_of_id": existing.id,
-                        "error_message": _("Already exists in batch %s.")
-                        % existing.batch_id.display_name,
-                    }
-                )
             line_values.append(vals)
 
         self.env["mv.prelog.conductor.recipient"].create(line_values)
-        return {
+        batch_action = {
             "type": "ir.actions.act_window",
-            "name": _("Prelog Conductor Batch"),
+            "name": _("Prelog Batch"),
             "res_model": "mv.prelog.conductor.batch",
             "res_id": batch.id,
             "view_mode": "form",
-            "target": "current",
+            "views": [
+                (
+                    self.env.ref(
+                        "marathon_short_form_prelogs.view_mv_prelog_conductor_batch_form"
+                    ).id,
+                    "form",
+                )
+            ],
+            "target": "main",
+        }
+        return {
+            "type": "ir.actions.client",
+            "tag": "display_notification",
+            "params": {
+                "title": _("Prelog Batch %s Started") % batch.name,
+                "message": _(
+                    "Your prelogs are being generated. You'll get an email when "
+                    "they're ready to send. You can safely close this page."
+                ),
+                "type": "info",
+                "sticky": False,
+                "next": batch_action,
+            },
         }
 
     def _rebuild_week_options(self):

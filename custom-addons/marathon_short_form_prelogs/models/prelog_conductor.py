@@ -2,9 +2,11 @@
 
 import base64
 import logging
+from html import escape
 
 from odoo import Command, _, api, fields, models
 from odoo.exceptions import UserError
+from odoo.tools import format_date
 
 from ..services.xlsx_renderer import render_short_form_workbook
 
@@ -13,7 +15,7 @@ _logger = logging.getLogger(__name__)
 
 class MvPrelogConductorBatch(models.Model):
     _name = "mv.prelog.conductor.batch"
-    _description = "Prelog Conductor Batch"
+    _description = "Prelog Batch"
     _order = "create_date desc, id desc"
 
     name = fields.Char(default="New", required=True, copy=False, readonly=True)
@@ -57,6 +59,28 @@ class MvPrelogConductorBatch(models.Model):
     failed_count = fields.Integer(compute="_compute_summary", store=True)
     queued_count = fields.Integer(compute="_compute_summary", store=True)
     sent_count = fields.Integer(compute="_compute_summary", store=True)
+    ready_notification_requested = fields.Boolean(
+        default=False,
+        readonly=True,
+        copy=False,
+    )
+    ready_notification_mail_id = fields.Many2one(
+        "mail.mail",
+        string="Ready Email",
+        readonly=True,
+        copy=False,
+        ondelete="set null",
+    )
+    ready_notification_queued_at = fields.Datetime(
+        string="Ready Email Queued",
+        readonly=True,
+        copy=False,
+    )
+    ready_notification_error = fields.Text(
+        string="Ready Email Error",
+        readonly=True,
+        copy=False,
+    )
 
     @api.model_create_multi
     def create(self, vals_list):
@@ -119,10 +143,90 @@ class MvPrelogConductorBatch(models.Model):
         action["context"] = {"default_batch_id": self.id, "create": False}
         return action
 
+    def _queue_ready_notifications(self):
+        """Queue one completion email after workbook generation has finished."""
+        for batch in self:
+            if (
+                not batch.ready_notification_requested
+                or batch.ready_notification_queued_at
+                or not batch.recipient_ids
+                or batch.recipient_ids.filtered(
+                    lambda line: line.status in {"pending", "processing", "duplicate"}
+                )
+            ):
+                continue
+
+            recipient_email = (batch.requested_by_id.email or "").strip()
+            if not recipient_email:
+                error = _(
+                    "The ready notification could not be queued because %(user)s "
+                    "does not have an email address."
+                ) % {"user": batch.requested_by_id.display_name}
+                if batch.ready_notification_error != error:
+                    batch.ready_notification_error = error
+                continue
+
+            week = format_date(batch.env, batch.week)
+            network = batch.network_id.display_name
+            action_xmlid = (
+                "marathon_short_form_prelogs.action_mv_prelog_conductor_batch"
+            )
+            batch_url = (
+                f"{batch.get_base_url().rstrip('/')}"
+                f"/odoo/action-{action_xmlid}/{batch.id}"
+            )
+            subject = _(
+                "Prelogs ready to send - %(network)s, %(week)s, %(version)s"
+            ) % {
+                "network": network,
+                "week": week,
+                "version": batch.version,
+            }
+            body_html = _(
+                "<p>Your prelogs for %(network)s for the week of %(week)s, "
+                "version %(version)s are ready to send.</p>"
+                "<p><a href=\"%(url)s\">Open %(batch)s to review and send them</a></p>"
+            ) % {
+                "network": escape(network or ""),
+                "week": escape(week),
+                "version": batch.version,
+                "url": escape(batch_url, quote=True),
+                "batch": escape(batch.name),
+            }
+
+            try:
+                with self.env.cr.savepoint():
+                    mail = self.env["mail.mail"].create(
+                        {
+                            "subject": subject,
+                            "body_html": body_html,
+                            "email_to": batch.requested_by_id.email_formatted,
+                            "email_from": self.env.company.email_formatted
+                            or batch.requested_by_id.email_formatted,
+                            "model": batch._name,
+                            "res_id": batch.id,
+                            "auto_delete": False,
+                        }
+                    )
+                    batch.write(
+                        {
+                            "ready_notification_mail_id": mail.id,
+                            "ready_notification_queued_at": fields.Datetime.now(),
+                            "ready_notification_error": False,
+                        }
+                    )
+                    self.env.ref("mail.ir_cron_mail_scheduler_action")._trigger()
+            except Exception as exc:
+                _logger.exception(
+                    "Could not queue ready notification for prelog batch %s",
+                    batch.id,
+                )
+                batch.ready_notification_error = str(exc)
+
 
 class MvPrelogConductorRecipient(models.Model):
     _name = "mv.prelog.conductor.recipient"
-    _description = "Prelog Conductor Recipient"
+    _description = "Prelog Recipient"
     _order = "batch_id desc, contact_id, id"
 
     batch_id = fields.Many2one(
@@ -195,9 +299,16 @@ class MvPrelogConductorRecipient(models.Model):
     error_message = fields.Text(string="Error", readonly=True)
     duplicate_of_id = fields.Many2one(
         "mv.prelog.conductor.recipient",
-        string="Existing Result",
+        string="Previous Send",
         readonly=True,
         ondelete="set null",
+    )
+    is_resend = fields.Boolean(
+        string="Resend",
+        default=False,
+        readonly=True,
+        index=True,
+        help="This recipient has already been sent the same Network, Week, and Version.",
     )
     mail_id = fields.Many2one(
         "mail.mail", string="Outgoing Message", readonly=True, ondelete="set null"
@@ -226,6 +337,27 @@ class MvPrelogConductorRecipient(models.Model):
         )
         if not candidates:
             raise UserError(_("Select at least one included, prepared recipient."))
+
+        resend_candidates = candidates.filtered("is_resend")
+        if resend_candidates and not self.env.context.get(
+            "skip_prelog_resend_confirmation"
+        ):
+            confirmation = self.env[
+                "mv.prelog.conductor.resend.confirm"
+            ].create(
+                {
+                    "recipient_ids": [Command.set(candidates.ids)],
+                    "resend_recipient_ids": [Command.set(resend_candidates.ids)],
+                }
+            )
+            return {
+                "type": "ir.actions.act_window",
+                "name": _("Confirm Prelog Resend"),
+                "res_model": "mv.prelog.conductor.resend.confirm",
+                "res_id": confirmation.id,
+                "view_mode": "form",
+                "target": "new",
+            }
 
         sent = 0
         failures = 0
@@ -266,7 +398,7 @@ class MvPrelogConductorRecipient(models.Model):
                         )
                         failures += 1
             except Exception as exc:  # keep processing the selected recipients
-                _logger.exception("Could not send Prelog Conductor recipient %s", line.id)
+                _logger.exception("Could not send prelog recipient %s", line.id)
                 line.write(
                     {
                         "status": "failed",
@@ -281,7 +413,7 @@ class MvPrelogConductorRecipient(models.Model):
             "type": "ir.actions.client",
             "tag": "display_notification",
             "params": {
-                "title": _("Prelog Conductor"),
+                "title": _("Prelog Generator"),
                 "message": _("Sent %(sent)s email(s); %(failed)s failed.")
                 % {"sent": sent, "failed": failures},
                 "type": "success" if not failures else "warning",
@@ -326,6 +458,12 @@ class MvPrelogConductorRecipient(models.Model):
             old_attachment = line.attachment_id
             keep_old_attachment = bool(line.mail_id)
             current_email = (line.contact_id.email or "").strip()
+            previous_send = line._find_previous_send()
+            is_resend = (
+                line.is_resend
+                or line.status in {"queued", "sent"}
+                or bool(previous_send)
+            )
             line.write(
                 {
                     "email": current_email or False,
@@ -334,7 +472,8 @@ class MvPrelogConductorRecipient(models.Model):
                     "mail_id": False,
                     "status": "pending",
                     "error_message": False,
-                    "duplicate_of_id": False,
+                    "is_resend": is_resend,
+                    "duplicate_of_id": previous_send.id if previous_send else False,
                     "rendered_at": False,
                     "queued_at": False,
                     "sent_at": False,
@@ -347,26 +486,64 @@ class MvPrelogConductorRecipient(models.Model):
     def _cron_process_prelog_conductor(self):
         self._sync_mail_statuses()
         lines = self.search(
-            [("status", "=", "pending")], order="create_date, id", limit=10
+            [("status", "in", ["pending", "duplicate"])],
+            order="create_date, id",
+            limit=10,
         )
         for line in lines:
-            line.write(
-                {
-                    "status": "processing",
-                    "attempt_count": line.attempt_count + 1,
-                    "error_message": False,
-                }
-            )
+            processing_values = {
+                "status": "processing",
+                "attempt_count": line.attempt_count + 1,
+                "error_message": False,
+            }
+            if line.status == "duplicate":
+                previous_send = line._find_previous_send()
+                processing_values.update(
+                    {
+                        "included": bool(line.email),
+                        "is_resend": bool(previous_send),
+                        "duplicate_of_id": (
+                            previous_send.id if previous_send else False
+                        ),
+                    }
+                )
+            line.write(processing_values)
             try:
                 with self.env.cr.savepoint():
                     line._generate_workbook()
             except Exception as exc:
                 _logger.exception(
-                    "Workbook generation failed for Prelog Conductor recipient %s",
+                    "Workbook generation failed for prelog recipient %s",
                     line.id,
                 )
                 line.write({"status": "failed", "error_message": str(exc)})
+        self.env.flush_all()
+        batches = self.env["mv.prelog.conductor.batch"].search(
+            [
+                ("ready_notification_requested", "=", True),
+                ("ready_notification_queued_at", "=", False),
+                ("state", "in", ["ready", "attention"]),
+            ],
+            order="create_date, id",
+            limit=50,
+        )
+        batches._queue_ready_notifications()
         self._sync_mail_statuses()
+
+    def _find_previous_send(self):
+        self.ensure_one()
+        return self.search(
+            [
+                ("id", "!=", self.id),
+                ("network_id", "=", self.network_id.id),
+                ("week", "=", self.week),
+                ("version", "=", self.version),
+                ("contact_id", "=", self.contact_id.id),
+                ("status", "in", ["queued", "sent"]),
+            ],
+            order="id desc",
+            limit=1,
+        )
 
     @api.model
     def _sync_mail_statuses(self):
@@ -413,3 +590,44 @@ class MvPrelogConductorRecipient(models.Model):
                 "error_message": False,
             }
         )
+
+
+class MvPrelogConductorResendConfirm(models.TransientModel):
+    _name = "mv.prelog.conductor.resend.confirm"
+    _description = "Confirm Prelog Resend"
+
+    recipient_ids = fields.Many2many(
+        "mv.prelog.conductor.recipient",
+        "mv_prelog_resend_confirm_recipient_rel",
+        "wizard_id",
+        "recipient_id",
+        string="Emails to Send",
+        required=True,
+        readonly=True,
+    )
+    resend_recipient_ids = fields.Many2many(
+        "mv.prelog.conductor.recipient",
+        "mv_prelog_resend_confirm_previous_rel",
+        "wizard_id",
+        "recipient_id",
+        string="Previously Sent Prelogs",
+        required=True,
+        readonly=True,
+    )
+    recipient_count = fields.Integer(compute="_compute_counts")
+    resend_count = fields.Integer(compute="_compute_counts")
+
+    @api.depends("recipient_ids", "resend_recipient_ids")
+    def _compute_counts(self):
+        for wizard in self:
+            wizard.recipient_count = len(wizard.recipient_ids)
+            wizard.resend_count = len(wizard.resend_recipient_ids)
+
+    def action_confirm_resend(self):
+        self.ensure_one()
+        candidates = self.recipient_ids.exists()
+        if not candidates:
+            raise UserError(_("There are no prepared emails to send."))
+        return candidates.with_context(
+            skip_prelog_resend_confirmation=True
+        ).action_send_selected()
