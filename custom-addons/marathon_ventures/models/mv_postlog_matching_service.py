@@ -127,10 +127,20 @@ class MvPostlogMatching(models.Model):
         # a filtered, ordered, LIMITed query. Nothing is matched here - the
         # import already did that and stored the verdict.
         counts = self._postlog_stored_counts(base_domain)
+        dollars = self._postlog_stored_dollars(base_domain)
         domain = self._postlog_stored_domain(
             base_domain, status, issue_filter, air_date, search_term,
         )
         total = self.search_count(domain)
+        # Dollar value of the CURRENT view (tab + search + air date +
+        # issue filter) across every matching row. Aggregated in SQL,
+        # so it is the full scope and not the visible page.
+        filtered_groups = self._read_group(domain, [], ['spot_rate:sum'])
+        filtered_dollars = 0.0
+        if filtered_groups:
+            _v = filtered_groups[0]
+            _v = _v[0] if isinstance(_v, (list, tuple)) else _v
+            filtered_dollars = round(float(_v or 0.0), 2)
         if total:
             offset = min(offset, ((total - 1) // limit) * limit)
         else:
@@ -150,6 +160,8 @@ class MvPostlogMatching(models.Model):
             'page': (offset // limit) + 1 if total else 0,
             'pages': ((total + limit - 1) // limit) if total else 0,
             'counts': counts,
+            'dollars': dollars,
+            'filtered_dollars': filtered_dollars,
         }
 
     @api.model
@@ -784,6 +796,16 @@ class MvPostlogMatching(models.Model):
             ),
             'submitted_by': job.submitted_by_id.display_name,
             'row_count': len(job.postlog_ids),
+            # Authoritative "as uploaded" figure so the workbench total
+            # can be verified against the file. The job sums spot_rate
+            # for EVERY parsed row including ones that failed to create,
+            # so when error_count > 0 this legitimately exceeds the live
+            # sum; error_count is exposed so the UI can say why.
+            'total_rate_amount': job.total_rate_amount or 0.0,
+            'matched_rate_amount': job.matched_rate_amount or 0.0,
+            'unmatched_rate_amount': job.unmatched_rate_amount or 0.0,
+            'error_count': job.error_count or 0,
+            'total_row_count': job.total_row_count or 0,
         }
 
     @api.model
@@ -1263,6 +1285,56 @@ class MvPostlogMatching(models.Model):
         )
         counts['no_suggestion'] = counts['unmatched'] - counts['suggestions']
         return counts
+
+    @api.model
+    def _postlog_stored_dollars(self, base_domain):
+        """Sum of `spot_rate` per tab, mirroring _postlog_stored_counts.
+
+        Unlike the prelog workbench - which already holds every row in
+        memory - this side only ever loads the visible page, so the
+        totals MUST come from SQL aggregates. Summing the returned rows
+        in JS would silently total just 200 records.
+
+        Buckets are kept in lockstep with the counts dict so each tab's
+        dollar figure describes exactly the rows its badge counts.
+        """
+        dollars = {
+            'all': 0.0, 'matched': 0.0, 'unmatched': 0.0,
+            'suggestions': 0.0, 'no_suggestion': 0.0, 'removed': 0.0,
+        }
+
+        def _sum(domain):
+            # _read_group with no groupby returns a single tuple of the
+            # requested aggregates.
+            groups = self._read_group(domain, [], ['spot_rate:sum'])
+            if not groups:
+                return 0.0
+            value = groups[0][0] if isinstance(groups[0], (list, tuple)) else groups[0]
+            return round(float(value or 0.0), 2)
+
+        dollars['removed'] = _sum(
+            [term for term in base_domain if term != ('removed', '=', False)]
+            + [('removed', '=', True)]
+        )
+
+        groups = self._read_group(
+            base_domain, ['import_match_status'], ['spot_rate:sum'],
+        )
+        for status, rate_sum in groups:
+            key = 'matched' if status == 'matched' else 'unmatched'
+            dollars[key] += float(rate_sum or 0.0)
+        dollars['matched'] = round(dollars['matched'], 2)
+        dollars['unmatched'] = round(dollars['unmatched'], 2)
+        dollars['all'] = round(dollars['matched'] + dollars['unmatched'], 2)
+
+        dollars['suggestions'] = _sum(
+            base_domain + [('import_match_status', '=', 'unmatched'),
+                           ('suggested_schedule', '!=', False)]
+        )
+        dollars['no_suggestion'] = round(
+            dollars['unmatched'] - dollars['suggestions'], 2,
+        )
+        return dollars
 
     @api.model
     def _postlog_info_text(self, flags, suggestion_count):

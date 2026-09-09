@@ -149,6 +149,11 @@ class MvPrelogDataFuzzyMatching(models.Model):
             'removed': sum(row['status'] == 'removed' for row in all_rows),
             'overruns': sum(row['status'] == 'overrun' for row in all_rows),
         }
+        # TOTAL DOLLARS, per tab. `all_rows` is the whole scope already
+        # built in memory (that is what the counts above are summed
+        # from), so this is pure arithmetic - no extra query, and it is
+        # the FULL scope rather than the 200-row page.
+        dollars = self._fuzzy_dollar_totals(all_rows)
         rows = self._fuzzy_filter_workbench_rows(
             all_rows,
             status=status,
@@ -179,6 +184,39 @@ class MvPrelogDataFuzzyMatching(models.Model):
             'page': (offset // limit) + 1 if total else 0,
             'pages': ((total + limit - 1) // limit) if total else 0,
             'counts': counts,
+            'dollars': dollars,
+            # Dollar value of the CURRENT view (tab + search + air date
+            # + issue filter), across every matching row, not just the
+            # visible page.
+            'filtered_dollars': round(
+                sum(float(r.get('rate') or 0.0) for r in rows), 2,
+            ),
+        }
+
+    @api.model
+    def _fuzzy_dollar_totals(self, all_rows):
+        """Sum of `rate` per tab, mirroring the `counts` buckets.
+
+        Kept in lockstep with the counts dict above so a tab's dollar
+        figure always describes exactly the rows its badge counts.
+        """
+        def _sum(predicate):
+            return round(sum(
+                float(row.get('rate') or 0.0)
+                for row in all_rows
+                if predicate(row)
+            ), 2)
+
+        return {
+            'all': _sum(lambda r: r['status'] != 'removed'),
+            'matched': _sum(lambda r: r['status'] == 'matched'),
+            'unmatched': _sum(
+                lambda r: r['status'] in ('suggestion', 'no_suggestion')
+            ),
+            'suggestions': _sum(lambda r: r['status'] == 'suggestion'),
+            'no_suggestion': _sum(lambda r: r['status'] == 'no_suggestion'),
+            'removed': _sum(lambda r: r['status'] == 'removed'),
+            'overruns': _sum(lambda r: r['status'] == 'overrun'),
         }
 
     @api.model
@@ -1111,6 +1149,18 @@ class MvPrelogDataFuzzyMatching(models.Model):
             ),
             'submitted_by': job.submitted_by_id.display_name,
             'row_count': len(job.prelog_ids),
+            # Authoritative "as uploaded" figure, so the workbench total
+            # can be verified against the file. NOTE: the job sums the
+            # rate of EVERY parsed row, including ones that then failed
+            # to create - so when error_count > 0 this legitimately
+            # exceeds the live sum over stored rows. error_count is
+            # exposed alongside it so the UI can explain a gap rather
+            # than look broken.
+            'total_rate_amount': job.total_rate_amount or 0.0,
+            'matched_rate_amount': job.matched_rate_amount or 0.0,
+            'unmatched_rate_amount': job.unmatched_rate_amount or 0.0,
+            'error_count': job.error_count or 0,
+            'total_row_count': job.total_row_count or 0,
         }
 
     @api.model

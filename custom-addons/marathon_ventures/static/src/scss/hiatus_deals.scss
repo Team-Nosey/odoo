@@ -1,0 +1,308 @@
+// Hiatus Deals - OWL port of the Salesforce hiatusDealComponent styling.
+// SLDS classes are replaced with Bootstrap + these hd-* rules; the visual
+// result (filter row, agency bar, green/red row shading, calendar popover)
+// is kept as close to the SF page as practical.
+
+.hd-root {
+    position: relative;
+    padding: 0 1rem 1.5rem;
+
+    // ── page heading ────────────────────────────────────────────
+    .hd-page-head {
+        display: flex;
+        align-items: center;
+        padding: 1rem 0 0.75rem;
+        border-bottom: 1px solid var(--o-color-border, #dee2e6);
+        margin-bottom: 1rem;
+    }
+    .hd-title {
+        margin: 0;
+        font-size: 1.35rem;
+        font-weight: 700;
+        color: var(--o-color-text, #212529);
+    }
+
+    // ── loading overlay ─────────────────────────────────────────
+    .hd-spinner-overlay {
+        position: absolute;
+        inset: 0;
+        z-index: 20;
+        display: flex;
+        align-items: flex-start;
+        justify-content: center;
+        padding-top: 6rem;
+        background: rgba(255, 255, 255, 0.6);
+        pointer-events: none;
+        color: #6c757d;
+    }
+
+    .hd-muted { color: #6c757d; }
+    .hd-small { font-size: 0.82rem; }
+
+    // ── filter row ──────────────────────────────────────────────
+    .hd-filters {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: flex-end;
+        gap: 0.75rem 1rem;
+        padding: 0.85rem 1rem;
+        border: 1px solid var(--o-color-border, #dee2e6);
+        border-radius: 8px;
+        background: #fbfbfd;
+    }
+    .hd-field {
+        flex: 1 1 260px;
+        min-width: 220px;
+        &_date { flex: 0 0 250px; min-width: 250px; }
+    }
+    .hd-label {
+        display: block;
+        margin-bottom: 0.25rem;
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: #495057;
+    }
+    .hd-filter-actions {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding-bottom: 1px;
+    }
+
+    // ── combobox (Program / Advertiser type-ahead) ──────────────
+    .hd-combobox { position: relative; }
+    .hd-combobox-input-wrap { position: relative; }
+    .hd-input { padding-right: 2.1rem; }
+
+    .hd-input-icon {
+        position: absolute;
+        top: 50%;
+        right: 0.35rem;
+        transform: translateY(-50%);
+        padding: 0.15rem 0.35rem;
+        border: 0;
+        background: none;
+        line-height: 1;
+        color: #6c757d;
+        &_static { pointer-events: none; }
+        &:hover { color: #212529; }
+    }
+
+    .hd-dropdown {
+        position: absolute;
+        z-index: 30;
+        top: calc(100% + 2px);
+        left: 0;
+        right: 0;
+        max-height: 15rem;
+        overflow-y: auto;
+        border: 1px solid var(--o-color-border, #dee2e6);
+        border-radius: 6px;
+        background: #fff;
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+    }
+    .hd-listbox { list-style: none; margin: 0; padding: 0.25rem 0; }
+    .hd-option {
+        padding: 0.35rem 0.75rem;
+        font-size: 0.86rem;
+        cursor: pointer;
+        &:hover,
+        &_active { background: #eef3ff; }
+        &_muted { color: #6c757d; cursor: default; &:hover { background: none; } }
+        &_note { font-size: 0.78rem; font-style: italic; }
+    }
+    .hd-option-label {
+        display: block;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    // ── date picker ─────────────────────────────────────────────
+    .hd-datepicker { position: relative; }
+    .hd-datepicker-trigger {
+        display: flex;
+        align-items: center;
+        text-align: left;
+        cursor: pointer;
+    }
+    .hd-datepicker-value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .hd-datepicker-chevron { font-size: 0.7rem; color: #6c757d; }
+
+    .hd-datepicker-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 40;
+    }
+    .hd-datepicker-dropdown {
+        position: absolute;
+        z-index: 41;
+        top: calc(100% + 4px);
+        left: 0;
+        width: 20rem;
+        padding: 0.75rem;
+        border: 1px solid var(--o-color-border, #dee2e6);
+        border-radius: 8px;
+        background: #fff;
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.16);
+    }
+    .hd-cal-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 0.5rem;
+    }
+    .hd-cal-month { font-weight: 700; font-size: 0.9rem; }
+
+    .hd-calendar-table {
+        width: 100%;
+        table-layout: fixed;
+        border-collapse: collapse;
+        th {
+            padding: 0.2rem 0;
+            font-size: 0.72rem;
+            font-weight: 600;
+            text-align: center;
+            color: #6c757d;
+            abbr { text-decoration: none; border: 0; }
+        }
+    }
+    .hd-cal-cell {
+        padding: 0.35rem 0;
+        text-align: center;
+        font-size: 0.82rem;
+        border-radius: 4px;
+        cursor: pointer;
+        &.hd-in-month:hover { background: #eef3ff; }
+        &.hd-out-month { color: #c6ccd4; cursor: default; }
+        &.hd-selected {
+            background: #0d6efd;
+            color: #fff;
+            font-weight: 700;
+            &:hover { background: #0b5ed7; }
+        }
+    }
+    .hd-datepicker-footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-top: 0.6rem;
+        padding-top: 0.5rem;
+        border-top: 1px solid var(--o-color-border, #dee2e6);
+    }
+    .hd-datepicker-footer-actions { display: flex; align-items: center; gap: 0.25rem; }
+
+    // ── agency bar / body ───────────────────────────────────────
+    .hd-agency-bar {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin-top: 1rem;
+        padding: 0.5rem 1rem;
+        border: 1px solid var(--o-color-border, #dee2e6);
+        border-bottom: 0;
+        border-radius: 8px 8px 0 0;
+        background: #f1f3f7;
+    }
+    .hd-agency-title { font-weight: 700; font-size: 0.9rem; }
+    .hd-agency-status { font-size: 0.8rem; color: #6c757d; }
+    .hd-agency-clear { margin-left: auto; padding: 0; font-size: 0.8rem; }
+
+    .hd-agency-body {
+        padding: 0.75rem 1rem 1rem;
+        border: 1px solid var(--o-color-border, #dee2e6);
+        border-radius: 0 0 8px 8px;
+    }
+    .hd-agency-controls {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.5rem 1rem;
+        margin-bottom: 0.5rem;
+    }
+    .hd-agency-filter {
+        position: relative;
+        flex: 0 1 20rem;
+        input { padding-left: 2rem; }
+    }
+    .hd-agency-filter-icon {
+        position: absolute;
+        top: 50%;
+        left: 0.65rem;
+        transform: translateY(-50%);
+        color: #6c757d;
+        pointer-events: none;
+        font-size: 0.8rem;
+    }
+    .hd-agency-select { max-width: 100%; font-size: 0.85rem; }
+    .hd-agency-message { margin: 0; font-size: 0.88rem; }
+
+    // ── results ─────────────────────────────────────────────────
+    .hd-results { margin-top: 1.25rem; }
+    .hd-results-header {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin-bottom: 0.35rem;
+    }
+    .hd-results-title { margin: 0; font-size: 1.05rem; font-weight: 700; }
+    .hd-table-actions { margin-bottom: 0.5rem; }
+
+    .hd-table-wrapper {
+        overflow-x: auto;
+        border: 1px solid var(--o-color-border, #dee2e6);
+        border-radius: 8px;
+    }
+    .hd-results-table {
+        margin: 0;
+        font-size: 0.84rem;
+        thead th {
+            position: sticky;
+            top: 0;
+            z-index: 2;
+            background: #333d51;
+            color: #fff;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        td { vertical-align: middle; }
+    }
+    .hd-col-check { width: 2.5rem; text-align: center; }
+    .hd-col-narrow { width: 5rem; }
+    .hd-col-remove { width: 5rem; }
+
+    // Row shading: green = every selected date already hiatused,
+    // red = not yet. Mirrors hd-cell_hiatused / hd-cell_open in the LWC.
+    .hd-cell {
+        &_hiatused { background: #e6f4ea; }
+        &_open { background: #fdecea; }
+    }
+    .hd-row-selected > td { outline: 1px solid rgba(13, 110, 253, 0.35); }
+
+    .hd-group-header {
+        margin: -0.15rem -0.35rem 0.25rem;
+        padding: 0.15rem 0.35rem;
+        font-weight: 700;
+        font-size: 0.8rem;
+        color: #333d51;
+        background: #eceff4;
+        border-radius: 3px;
+    }
+
+    .hd-empty {
+        padding: 0.9rem 1rem;
+        border: 1px solid var(--o-color-border, #dee2e6);
+        border-radius: 8px;
+        background: #f8f9fa;
+        color: #6c757d;
+        font-size: 0.86rem;
+    }
+}
+
+@media (max-width: 900px) {
+    .hd-root {
+        .hd-filters { flex-direction: column; align-items: stretch; }
+        .hd-field, .hd-field_date { flex: 1 1 100%; min-width: 0; }
+        .hd-filter-actions { justify-content: flex-start; }
+    }
+}
