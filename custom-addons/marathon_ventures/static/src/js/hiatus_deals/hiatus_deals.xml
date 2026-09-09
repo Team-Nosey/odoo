@@ -1,218 +1,238 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <templates xml:space="preserve">
 
-  <!--
-    Hiatus Deals - OWL port of the Salesforce hiatusDealComponent template.
-    Section order matches the LWC exactly:
-      1. Filter row      Program · Advertiser · Select Date(s) · Search
-      2. Agency bar + body
-      3. Results         bulk actions + table
-  -->
+  <!-- ════════════════════════════════════════════════════════════════
+       Reusable multi-select. Program / Advertiser / Agency all render
+       through THIS template, so their look and behaviour are identical
+       by construction rather than by three copies of the markup.
+       ════════════════════════════════════════════════════════════════ -->
+  <t t-name="marathon_ventures.HiatusMultiSelect">
+    <div class="hd-field">
+      <label class="hd-label" t-esc="props.label"/>
+      <div class="hd-ms" t-att-class="ui.open ? 'hd-is-open' : ''"
+           t-on-keydown="onKeydown">
+        <button type="button" class="form-control hd-ms-trigger"
+                t-att-disabled="props.disabled"
+                t-att-class="hasSelection ? 'hd-ms-trigger_active' : ''"
+                aria-haspopup="listbox"
+                t-att-aria-expanded="ui.open ? 'true' : 'false'"
+                t-on-click="toggle">
+          <span class="hd-ms-summary" t-esc="summary"/>
+          <span t-if="hasSelection" class="hd-ms-count" t-esc="props.selected.length"/>
+          <i class="fa fa-chevron-down hd-ms-chevron"/>
+        </button>
+
+        <t t-if="ui.open">
+          <div class="hd-ms-backdrop" t-on-mousedown="close"/>
+          <div class="hd-ms-dropdown" role="listbox">
+            <div class="hd-ms-search">
+              <i class="fa fa-search"/>
+              <input type="search" class="form-control form-control-sm"
+                     t-att-placeholder="'Filter ' + props.label.toLowerCase() + '…'"
+                     t-att-value="ui.term"
+                     t-on-input="onTermInput"/>
+            </div>
+
+            <div class="hd-ms-actions">
+              <button type="button" class="btn btn-link btn-sm"
+                      t-on-mousedown.prevent.stop="onSelectAllVisible">
+                Select all<t t-if="ui.term"> shown</t>
+              </button>
+              <button type="button" class="btn btn-link btn-sm text-danger"
+                      t-att-disabled="!hasSelection"
+                      t-on-mousedown.prevent.stop="onClear">Clear</button>
+            </div>
+
+            <ul class="hd-ms-list">
+              <li t-foreach="filtered" t-as="opt" t-key="opt.value"
+                  class="hd-ms-option" role="option"
+                  t-att-aria-selected="isChecked(opt.value) ? 'true' : 'false'"
+                  t-on-mousedown.prevent="() => this.onToggleOption(opt.value)">
+                <input type="checkbox" t-att-checked="isChecked(opt.value)"
+                       tabindex="-1"/>
+                <span class="hd-ms-option-label" t-att-title="opt.label"
+                      t-esc="opt.label"/>
+              </li>
+              <li t-if="!filtered.length" class="hd-ms-option hd-ms-option_muted">
+                <t t-if="props.options.length">No match for that filter</t>
+                <t t-else="" t-esc="props.emptyHint or 'No options available'"/>
+              </li>
+            </ul>
+
+            <div class="hd-ms-foot">
+              <span class="hd-muted hd-small">
+                <t t-esc="filtered.length"/> shown ·
+                <t t-esc="props.selected.length"/> selected
+              </span>
+              <button type="button" class="btn btn-primary btn-sm"
+                      t-on-click="close">Done</button>
+            </div>
+          </div>
+        </t>
+      </div>
+    </div>
+  </t>
+
+
+  <!-- ════════════════════════════════════════════════════════════════
+       Hiatus Deals page.
+
+       Flow, top to bottom:
+         Step 1  Select Date(s)      - mandatory, gates everything
+         Step 2  Program / Advertiser / Agency, populated from the deals
+                 in that date range, all multi-select
+         Step 3  Search -> results
+       ════════════════════════════════════════════════════════════════ -->
   <t t-name="marathon_ventures.MvHiatusDeals">
     <div class="hd-root">
 
       <div class="hd-page-head">
-        <h1 class="hd-title">
-          <i class="fa fa-calendar-o me-2"/>Hiatus Deals
-        </h1>
+        <h1 class="hd-title"><i class="fa fa-calendar-o me-2"/>Hiatus Deals</h1>
       </div>
 
       <div class="hd-spinner-overlay" t-if="state.loading">
         <i class="fa fa-spinner fa-spin fa-2x"/>
       </div>
 
-      <!-- ══ 1. Filters ═══════════════════════════════════════════ -->
-      <section class="hd-filters">
-
-        <!-- Program combobox -->
-        <div class="hd-field">
-          <label class="hd-label" for="hd_program_input">Program</label>
-          <div class="hd-combobox" t-att-class="state.programOpen ? 'hd-is-open' : ''">
-            <div class="hd-combobox-input-wrap">
-              <input id="hd_program_input" type="text" class="form-control hd-input"
-                     autocomplete="off" role="combobox"
-                     t-att-aria-expanded="state.programOpen ? 'true' : 'false'"
-                     placeholder="All programs — type to search"
-                     t-att-value="state.programSearchTerm"
-                     t-on-focus="onProgramFocus"
-                     t-on-input="onProgramInput"
-                     t-on-keydown="onProgramKeyDown"
-                     t-on-blur="onProgramBlur"/>
-              <button t-if="hasProgramSelection" type="button"
-                      class="btn hd-input-icon" title="Clear program"
-                      t-on-mousedown.prevent.stop="onClearProgram">
-                <i class="fa fa-times"/>
-              </button>
-              <span t-else="" class="hd-input-icon hd-input-icon_static">
-                <i class="fa fa-search"/>
-              </span>
-            </div>
-            <div class="hd-dropdown" t-if="state.programOpen" role="listbox">
-              <ul class="hd-listbox">
-                <li t-foreach="programListItems" t-as="opt" t-key="opt.key"
-                    class="hd-option" t-att-class="opt.active ? 'hd-option_active' : ''"
-                    role="option" t-att-aria-selected="opt.active ? 'true' : 'false'"
-                    t-on-mousedown.prevent="() => this.selectProgram(opt.value, opt.label)">
-                  <span class="hd-option-label" t-att-title="opt.label" t-esc="opt.label"/>
-                </li>
-                <li t-if="noProgramMatches" class="hd-option hd-option_muted">
-                  No matching programs
-                </li>
-                <li t-if="showProgramTruncatedNote" class="hd-option hd-option_muted hd-option_note">
-                  <t t-esc="programTruncatedNote"/>
-                </li>
-              </ul>
-            </div>
-          </div>
+      <!-- ── Filters: one row, Date first, then the three
+               multi-selects, then Search. Date gates the rest. ──── -->
+      <section class="hd-filters-card"
+               t-att-class="hasDates ? 'hd-filters-card_ready' : 'hd-filters-card_gated'">
+        <div class="hd-filters-head">
+          <span class="hd-step-num">1</span>
+          <span class="hd-step-title">Filters</span>
+          <span class="hd-req">Date required</span>
+          <span class="hd-muted hd-small hd-step-hint" t-esc="optionsSummary"/>
+          <i t-if="state.optionsLoading" class="fa fa-spinner fa-spin ms-1"/>
         </div>
 
-        <!-- Advertiser combobox -->
-        <div class="hd-field">
-          <label class="hd-label" for="hd_advertiser_input">Advertiser</label>
-          <div class="hd-combobox" t-att-class="state.advertiserOpen ? 'hd-is-open' : ''">
-            <div class="hd-combobox-input-wrap">
-              <input id="hd_advertiser_input" type="text" class="form-control hd-input"
-                     autocomplete="off" role="combobox"
-                     t-att-aria-expanded="state.advertiserOpen ? 'true' : 'false'"
-                     placeholder="Any advertiser — type or pick a suggestion"
-                     t-att-value="state.advertiserSearchTerm"
-                     t-on-focus="onAdvertiserFocus"
-                     t-on-input="onAdvertiserInput"
-                     t-on-keydown="onAdvertiserKeyDown"
-                     t-on-blur="onAdvertiserBlur"/>
-              <button t-if="hasAdvertiserText" type="button"
-                      class="btn hd-input-icon" title="Clear advertiser"
-                      t-on-mousedown.prevent.stop="onClearAdvertiser">
-                <i class="fa fa-times"/>
+        <div class="hd-filters-row">
+          <!-- Date(s) - the gate -->
+          <div class="hd-field hd-field_date">
+            <label class="hd-label">Date(s)</label>
+            <div class="hd-datepicker">
+              <button type="button" class="form-control hd-ms-trigger"
+                      t-att-class="hasDates ? 'hd-ms-trigger_active' : ''"
+                      aria-haspopup="dialog"
+                      t-att-aria-expanded="state.datePickerOpen ? 'true' : 'false'"
+                      t-on-click="toggleDatePicker"
+                      t-on-keydown="onDatePickerKeydown">
+                <i class="fa fa-calendar-o hd-ms-lead"/>
+                <span class="hd-ms-summary" t-esc="datePickerLabel"/>
+                <span t-if="hasDates" class="hd-ms-count"
+                      t-esc="state.selectedDates.length"/>
+                <i class="fa fa-chevron-down hd-ms-chevron"/>
               </button>
-              <span t-else="" class="hd-input-icon hd-input-icon_static">
-                <i class="fa fa-search"/>
-              </span>
-            </div>
-            <div class="hd-dropdown" t-if="state.advertiserOpen" role="listbox">
-              <ul class="hd-listbox">
-                <li t-foreach="advertiserListItems" t-as="opt" t-key="opt.key"
-                    class="hd-option" t-att-class="opt.active ? 'hd-option_active' : ''"
-                    role="option" t-att-aria-selected="opt.active ? 'true' : 'false'"
-                    t-on-mousedown.prevent="() => this.selectAdvertiser(opt.value, opt.label)">
-                  <span class="hd-option-label" t-att-title="opt.label" t-esc="opt.label"/>
-                </li>
-                <li t-if="noAdvertiserMatches" class="hd-option hd-option_muted">
-                  No matching advertisers
-                </li>
-              </ul>
-            </div>
-          </div>
-        </div>
 
-        <!-- Select Date(s) -->
-        <div class="hd-field hd-field_date">
-          <label class="hd-label">Select Date(s)</label>
-          <div class="hd-datepicker">
-            <button type="button" class="form-control hd-datepicker-trigger"
-                    aria-haspopup="dialog"
-                    t-att-aria-expanded="state.datePickerOpen ? 'true' : 'false'"
-                    t-on-click="toggleDatePicker"
-                    t-on-keydown="onDatePickerKeydown">
-              <i class="fa fa-calendar me-2"/>
-              <span class="hd-datepicker-value" t-esc="datePickerLabel"/>
-              <i class="fa fa-chevron-down ms-auto hd-datepicker-chevron"/>
-            </button>
+              <t t-if="state.datePickerOpen">
+                <div class="hd-ms-backdrop" t-on-mousedown="closeDatePicker"/>
+                <div class="hd-datepicker-dropdown" role="dialog">
+                  <div class="hd-cal-head">
+                    <button type="button" class="btn btn-sm btn-light"
+                            title="Previous month" t-on-click="onPreviousMonth">
+                      <i class="fa fa-chevron-left"/>
+                    </button>
+                    <div class="hd-cal-month" t-esc="monthLabel"/>
+                    <button type="button" class="btn btn-sm btn-light"
+                            title="Next month" t-on-click="onNextMonth">
+                      <i class="fa fa-chevron-right"/>
+                    </button>
+                  </div>
 
-            <t t-if="state.datePickerOpen">
-              <div class="hd-datepicker-backdrop" t-on-mousedown="closeDatePicker"/>
-              <div class="hd-datepicker-dropdown" role="dialog">
-                <div class="hd-cal-head">
-                  <button type="button" class="btn btn-sm btn-light"
-                          title="Previous month" t-on-click="onPreviousMonth">
-                    <i class="fa fa-chevron-left"/>
-                  </button>
-                  <div class="hd-cal-month" t-esc="monthLabel"/>
-                  <button type="button" class="btn btn-sm btn-light"
-                          title="Next month" t-on-click="onNextMonth">
-                    <i class="fa fa-chevron-right"/>
-                  </button>
-                </div>
+                  <table class="hd-calendar-table" role="grid">
+                    <thead>
+                      <tr>
+                        <th t-foreach="weekdayLabels" t-as="wd" t-key="wd" scope="col">
+                          <abbr t-att-title="wd" t-esc="wd"/>
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr t-foreach="calendarWeeks" t-as="week" t-key="week.key">
+                        <td t-foreach="week.days" t-as="day" t-key="day.key"
+                            t-att-class="day.cssClass"
+                            t-att-data-date="day.dateStr"
+                            t-on-click="onDateClick">
+                          <t t-esc="day.label"/>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
 
-                <table class="hd-calendar-table" role="grid">
-                  <thead>
-                    <tr>
-                      <th t-foreach="weekdayLabels" t-as="wd" t-key="wd" scope="col">
-                        <abbr t-att-title="wd" t-esc="wd"/>
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr t-foreach="calendarWeeks" t-as="week" t-key="week.key">
-                      <td t-foreach="week.days" t-as="day" t-key="day.key"
-                          t-att-class="day.cssClass"
-                          t-att-data-date="day.dateStr"
-                          t-on-click="onDateClick">
-                        <t t-esc="day.label"/>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-
-                <div class="hd-datepicker-footer">
-                  <span class="hd-muted hd-small" t-esc="datePickerLabel"/>
-                  <div class="hd-datepicker-footer-actions">
-                    <button type="button" class="btn btn-link btn-sm"
-                            t-on-click="onClearDates">Clear</button>
-                    <button type="button" class="btn btn-primary btn-sm"
-                            t-on-click="toggleDatePicker">Done</button>
+                  <div class="hd-ms-foot">
+                    <span class="hd-muted hd-small" t-esc="datePickerLabel"/>
+                    <div class="hd-ms-actions">
+                      <button type="button" class="btn btn-link btn-sm text-danger"
+                              t-on-click="onClearDates">Clear</button>
+                      <button type="button" class="btn btn-primary btn-sm"
+                              t-on-click="closeDatePicker">Done</button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </t>
+              </t>
+            </div>
+          </div>
+
+          <HiatusMultiSelect
+            label="'Program'"
+            placeholder="'All programs'"
+            emptyHint="'No programs in the selected dates'"
+            options="state.options.programs"
+            selected="state.selectedPrograms"
+            disabled="filtersDisabled"
+            onChange.bind="onProgramsChange"/>
+
+          <HiatusMultiSelect
+            label="'Advertiser'"
+            placeholder="'All advertisers'"
+            emptyHint="'No advertisers in the selected dates'"
+            options="state.options.advertisers"
+            selected="state.selectedAdvertisers"
+            disabled="filtersDisabled"
+            onChange.bind="onAdvertisersChange"/>
+
+          <HiatusMultiSelect
+            label="'Agency'"
+            placeholder="'All agencies'"
+            emptyHint="'No agencies in the selected dates'"
+            options="state.options.agencies"
+            selected="state.selectedAgencies"
+            disabled="filtersDisabled"
+            onChange.bind="onAgenciesChange"/>
+
+          <div class="hd-field hd-field_actions">
+            <label class="hd-label">&#160;</label>
+            <button type="button" class="btn btn-primary hd-search-btn"
+                    t-att-disabled="!canSearch"
+                    t-att-title="searchBlockedReason"
+                    t-on-click="onSearch">
+              <i class="fa fa-search me-1"/>Search
+            </button>
           </div>
         </div>
 
-        <!-- Search / Clear dates -->
-        <div class="hd-filter-actions">
-          <button type="button" class="btn btn-primary"
-                  t-att-disabled="state.loading" t-on-click="onSearch">
-            <i class="fa fa-search me-1"/>Search
-          </button>
-          <button type="button" class="btn btn-link text-danger"
-                  t-on-click="onClearDates">Clear dates</button>
+        <!-- Selected dates as removable chips, under the row. -->
+        <div class="hd-pills" t-if="hasDates">
+          <span t-foreach="selectedDatePills" t-as="pill" t-key="pill.value"
+                class="hd-pill">
+            <t t-esc="pill.label"/>
+            <button type="button" class="hd-pill-x" title="Remove date"
+                    t-on-click="() => this.removeDatePill(pill.value)">
+              <i class="fa fa-times"/>
+            </button>
+          </span>
+          <button type="button" class="btn btn-link btn-sm"
+                  t-on-click="onClearDates">Clear all</button>
+        </div>
+
+        <div class="hd-filters-gate" t-if="!hasDates">
+          <i class="fa fa-lock me-1"/>
+          Pick a date to unlock Program, Advertiser and Agency — they are
+          built from the deals in that range.
         </div>
       </section>
 
-      <!-- ══ 2. Agencies ══════════════════════════════════════════ -->
-      <div class="hd-agency-bar">
-        <span class="hd-agency-title">Agency / Agencies</span>
-        <span class="hd-agency-status" t-esc="agencyStatusText"/>
-        <button t-if="hasSelectedAgencies" type="button"
-                class="btn btn-link btn-sm hd-agency-clear"
-                t-on-click="onClearAgencies">Clear</button>
-      </div>
-
-      <div class="hd-agency-body">
-        <t t-if="hasAgencies">
-          <div class="hd-agency-controls">
-            <div class="hd-agency-filter">
-              <i class="fa fa-search hd-agency-filter-icon"/>
-              <input type="search" class="form-control" placeholder="Filter agencies..."
-                     t-att-value="state.agencySearchTerm"
-                     t-on-input="onAgencyFilter"/>
-            </div>
-            <span class="hd-muted hd-small" t-esc="agencyHelpText"/>
-          </div>
-
-          <select class="form-select hd-agency-select" multiple="multiple" size="6"
-                  t-on-change="onAgencyChange">
-            <option t-foreach="filteredAgencyOptions" t-as="agency"
-                    t-key="agency.value"
-                    t-att-value="agency.value"
-                    t-att-selected="isAgencySelected(agency.value) ? 'selected' : null"
-                    t-esc="agency.label"/>
-          </select>
-        </t>
-        <p t-else="" class="hd-muted hd-agency-message" t-esc="agencyEmptyText"/>
-      </div>
-
-      <!-- ══ 3. Results ═══════════════════════════════════════════ -->
+      <!-- ── Step 3: results ────────────────────────────────────── -->
       <section class="hd-results">
         <div class="hd-results-header">
           <h2 class="hd-results-title">Results</h2>
@@ -295,12 +315,16 @@
         </t>
 
         <div t-else="" class="hd-empty">
-          <t t-if="state.hasSearched">
-            No deals matched those filters. Widen the date range, program or
-            advertiser and search again.
+          <t t-if="!hasDates">
+            Select date(s) in step 1, then Search.
+          </t>
+          <t t-elif="state.hasSearched">
+            No deals matched those filters. Widen the dates or clear a
+            filter and search again.
           </t>
           <t t-else="">
-            No results yet. Set your filters and click <b>Search</b>.
+            Ready — adjust the filters if you need to, then click
+            <b>Search</b>.
           </t>
         </div>
       </section>

@@ -156,88 +156,86 @@ class MvDealHiatus(models.Model):
     )
 
     # ==================================================================
-    # Option providers
+    # Date-driven filter options
+    #
+    # The page flow is: pick date(s) FIRST, then Program / Advertiser /
+    # Agency are populated from the deals that actually fall in that
+    # range. So all three lists come from ONE query over the same
+    # candidate set the search will use - a value that no deal in range
+    # carries simply never appears as an option.
     # ==================================================================
     @api.model
-    def hiatus_get_program_options(self):
-        """SF getProgramOptions(). Domain-filters what SQL can do, then
-        applies the two case-insensitive text exclusions in Python."""
-        Programs = self.env['mv.programs']
-        candidates = Programs.search(
-            [
-                ('inactive', '=', False),
-                ('cable_synd', '!=', False),
-                ('account_exec_1', '!=', False),
-                # SOQL: NOT Name LIKE '% PP'. Odoo's `like` auto-wraps in
-                # %..%, so `=like` is needed to pass the pattern verbatim.
-                ('name', 'not =like', '% PP'),
-            ],
-            order='name asc',
-        )
-        options = []
-        for prog in candidates:
-            client_code = (prog.clientcode or '').strip().lower()
-            team = (prog.team or '').strip().lower()
-            if client_code == 'm1' or team == 'onyx':
-                continue
-            options.append({
-                'label': prog.name or '',
-                'value': str(prog.id),
-                'recordId': prog.id,
-            })
-        return options
+    def hiatus_get_filter_options(self, selected_dates_csv=''):
+        """Program / Advertiser / Agency options for the chosen dates.
 
-    @api.model
-    def hiatus_get_advertiser_options(self, search_term=''):
-        """SF getAdvertiserOptions(). Option VALUE is the advertiser name,
-        because the deal side is matched by text."""
-        domain = [('hold_placed_on_advertiser_account', '=', False)]
-        term = (search_term or '').strip()
-        if term:
-            domain.append(('name', 'ilike', term))
-        advertisers = self.env['mv.advertiser'].search(
-            domain, order='name asc', limit=_OPTION_QUERY_LIMIT,
-        )
-        return [
-            {'label': a.name or '', 'value': a.name or '', 'recordId': a.id}
-            for a in advertisers
-            if a.name
-        ]
+        Returns:
+            {
+              'programs':    [{'value': <id str>, 'label': str}, ...],
+              'advertisers': [{'value': str, 'label': str}, ...],
+              'agencies':    [{'value': str, 'label': str}, ...],
+              'deal_count':  int,
+            }
 
-    @api.model
-    def hiatus_get_agency_options(self, selected_dates_csv='', program_id=False):
-        """SF getAgencyOptions(). Distinct ContactAccount values across the
-        deals that match the current Program / date selection."""
+        Raises UserError when no date is selected - date is the gate for
+        the whole page, so there is nothing meaningful to offer yet.
+        """
         dates = _parse_dates_csv(selected_dates_csv)
-        week = _monday_of(dates[0]) if dates else None
-        prog_id = int(program_id) if program_id else False
-
-        if not week and not prog_id:
+        if not dates:
             raise UserError(_(
-                'Please select a date on the calendar and a program before '
-                'loading agencies.'
+                'Select at least one date before loading the filters.'
             ))
 
+        deals = self._mv_hiatus_candidate_deals(dates)
+
+        programs = {}
+        advertisers = set()
+        agencies = set()
+        for deal in deals:
+            if deal.program:
+                programs[deal.program.id] = deal.program.name or ''
+            adv = (
+                deal.brands.advertiser.name
+                if deal.brands and deal.brands.advertiser else ''
+            )
+            if adv and adv.strip():
+                advertisers.add(adv.strip())
+            if deal.contactaccount and deal.contactaccount.strip():
+                agencies.add(deal.contactaccount.strip())
+
+        return {
+            'programs': [
+                {'value': str(pid), 'label': name}
+                for pid, name in sorted(
+                    programs.items(), key=lambda kv: (kv[1] or '').lower(),
+                )
+            ],
+            'advertisers': [
+                {'value': a, 'label': a}
+                for a in sorted(advertisers, key=lambda v: v.lower())
+            ],
+            'agencies': [
+                {'value': a, 'label': a}
+                for a in sorted(agencies, key=lambda v: v.lower())
+            ],
+            'deal_count': len(deals),
+        }
+
+    @api.model
+    def _mv_hiatus_candidate_deals(self, dates):
+        """Deals in scope for the selected dates - the single source of
+        truth shared by the option lists and the search, so the two can
+        never disagree about what is 'in range'."""
         domain = self._mv_hiatus_base_deal_domain()
-        domain.append(('contactaccount', '!=', False))
+        week = _monday_of(dates[0]) if dates else None
         if week:
             deal_ids = self._mv_hiatus_deal_ids_with_schedule(week, dates)
-            domain.append(('id', 'in', deal_ids or [0]))
-        if prog_id:
-            domain.append(('program', '=', prog_id))
-
-        deals = self.search(
-            domain, order='contactaccount asc', limit=_CANDIDATE_QUERY_LIMIT,
+            or_branch = [('id', 'in', deal_ids or [0])]
+            for d in dates:
+                or_branch.append(('hiatus_dates', 'ilike', _iso(d)))
+            domain += ['|'] * (len(or_branch) - 1) + or_branch
+        return self.search(
+            domain, order='create_date desc', limit=_CANDIDATE_QUERY_LIMIT,
         )
-        agencies = sorted({
-            d.contactaccount.strip()
-            for d in deals
-            if d.contactaccount and d.contactaccount.strip()
-        })
-        return [
-            {'label': a, 'value': a, 'recordId': None}
-            for a in agencies
-        ]
 
     # ==================================================================
     # Search
@@ -291,48 +289,58 @@ class MvDealHiatus(models.Model):
     def hiatus_search_deals(
         self,
         selected_dates_csv='',
-        program_id=False,
+        program_ids=None,
+        advertisers=None,
         agencies=None,
-        advertiser_search_text='',
-        advertiser_exact_match=False,
     ):
-        """SF searchDeals(). Returns rows already sorted, capped and
-        group-headered, ready for the table."""
+        """Search the deals in range, narrowed by the three multi-select
+        filters. Returns rows already sorted, capped and group-headered.
+
+        Date is MANDATORY - it defines the candidate set that the filter
+        options were themselves derived from. All three filters are
+        multi-select lists; an empty list means "no restriction".
+        """
         dates = _parse_dates_csv(selected_dates_csv)
+        if not dates:
+            raise UserError(_(
+                'Select at least one date on the calendar before searching.'
+            ))
         date_strs = [_iso(d) for d in dates]
-        week = _monday_of(dates[0]) if dates else None
-        prog_id = int(program_id) if program_id else False
-        exact = bool(advertiser_exact_match)
+        week = _monday_of(dates[0])
 
         domain = self._mv_hiatus_base_deal_domain()
 
-        if week:
-            # A deal already hiatused on a selected date has had that
-            # weekday stripped from its schedule, so the schedule match
-            # alone would drop it. OR in a direct hiatus_dates match so it
-            # stays visible (SF "Req 1").
-            deal_ids = self._mv_hiatus_deal_ids_with_schedule(week, dates)
-            or_branch = [('id', 'in', deal_ids or [0])]
-            for ds in date_strs:
-                or_branch.append(('hiatus_dates', 'ilike', ds))
-            # n leaves need n-1 OR operators in prefix notation.
-            domain += ['|'] * (len(or_branch) - 1) + or_branch
+        # A deal already hiatused on a selected date has had that weekday
+        # stripped from its schedule, so the schedule match alone would
+        # drop it. OR in a direct hiatus_dates match so it stays visible
+        # (SF "Req 1").
+        deal_ids = self._mv_hiatus_deal_ids_with_schedule(week, dates)
+        or_branch = [('id', 'in', deal_ids or [0])]
+        for ds in date_strs:
+            or_branch.append(('hiatus_dates', 'ilike', ds))
+        # n leaves need n-1 OR operators in prefix notation.
+        domain += ['|'] * (len(or_branch) - 1) + or_branch
 
-        if prog_id:
-            domain.append(('program', '=', prog_id))
+        prog_list = []
+        for value in (program_ids or []):
+            try:
+                parsed = int(value)
+            except (TypeError, ValueError):
+                continue
+            if parsed:
+                prog_list.append(parsed)
+        if prog_list:
+            domain.append(('program', 'in', prog_list))
 
         agency_list = [a for a in (agencies or []) if a]
         if agency_list:
             domain.append(('contactaccount', 'in', agency_list))
 
-        term = (advertiser_search_text or '').strip()
-        if term:
-            # Via the relation - see deviation note 1 at the top of this file.
-            domain.append((
-                'brands.advertiser.name',
-                '=' if exact else 'ilike',
-                term,
-            ))
+        adv_list = [a for a in (advertisers or []) if a]
+        if adv_list:
+            # Via the relation - see deviation note 1 at the top of this
+            # file. Exact names, since they came from our own option list.
+            domain.append(('brands.advertiser.name', 'in', adv_list))
 
         candidates = self.search(
             domain, order='create_date desc', limit=_CANDIDATE_QUERY_LIMIT,
