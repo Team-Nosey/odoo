@@ -153,6 +153,15 @@ class MvSpotData(models.Model):
     # currently a suggestion count for unmatched rows, blank for matched - so it
     # can carry non-matching notes later without another field.
     info = fields.Char(string='Info', size=255)
+    # "The schedule I am attached to is over its units_available." A property of
+    # the SCHEDULE, recorded on each of its rows so the Overruns tab can be an
+    # ORM domain rather than a pass over the week. Every attached row of an
+    # over-capacity schedule carries it, not a chosen subset: the fix is to
+    # remove the surplus airings, and you cannot choose which to remove without
+    # seeing all of them. Written only by _recompute_postlog_overruns, which
+    # always processes a whole schedule at a time - see
+    # models/phase31_postlog_overrun.py.
+    is_overrun = fields.Boolean(string='Is Overrun', index=True)
 
     # Composite indexes for the Postlog Workbench. The ORM builds the
     # single-column ones for every field marked index=True; these are the

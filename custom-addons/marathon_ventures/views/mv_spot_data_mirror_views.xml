@@ -92,5 +92,7 @@
     <field name="view_mode">list,form</field>
   </record>
 
-  <menuitem id="menu_mv_spot_data_mirror" name="Spot Data Mirror" parent="menu_mv_operations" action="action_mv_spot_data_mirror" sequence="12"/>
+  <!-- Menu removed 2026-09-09: mv.spot_data_mirror holds no rows and nothing
+       writes to it. The graph/pivot dashboards read this model, which is why
+       they render empty - left in place for whenever it gets populated. -->
 </odoo>

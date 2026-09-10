@@ -25,19 +25,6 @@ registry.category("web_tour.tours").add("postlog_workbench_tour", {
             },
         },
         {
-            // Overruns stays dropped - postlog has no unit-overrun concept. This
-            // step used to assert Removed was absent too, before duplicate and
-            // bonus spots needed taking out of reconciliation.
-            content: "the dropped Overruns tab is not rendered",
-            trigger: ".mv-fuzzy",
-            run() {
-                const tabs = document.querySelector(".mv-fuzzy__tabs");
-                if (tabs && /Overrun/.test(tabs.textContent)) {
-                    throw new Error("the Overruns tab is still rendered");
-                }
-            },
-        },
-        {
             content: "pick the program",
             trigger: ".mv-fuzzy__filter-grid select",
             // The generic "select" helper matches an option by its VALUE, and
@@ -75,6 +62,29 @@ registry.category("web_tour.tours").add("postlog_workbench_tour", {
         {
             content: "the fixture row rendered",
             trigger: "td:contains('UI Fixture Product')",
+        },
+        {
+            // This step has tracked what postlog does and does not have
+            // twice now - it guarded the absence of Removed, then of
+            // Overruns, and both eventually arrived. It asserts the whole
+            // set instead, so the next addition or removal shows up as a
+            // failure here rather than being noticed months later.
+            //
+            // It has to sit after the first query: the tab nav renders
+            // only once hasFiltered is true. The guards it replaced were
+            // null-safe negative checks, so they passed on the empty
+            // welcome screen and never needed a result.
+            content: "the tab set is exactly what postlog supports",
+            trigger: ".mv-fuzzy__tabs",
+            run() {
+                const labels = [...document.querySelectorAll(".mv-fuzzy__tabs button")]
+                    .map((b) => b.textContent.replace(/[0-9]+/g, "").trim());
+                const expected = ["All", "Matched", "Unmatched", "Suggestions",
+                                  "No Suggestion", "Removed", "Overruns"];
+                if (JSON.stringify(labels) !== JSON.stringify(expected)) {
+                    throw new Error(`tabs are ${JSON.stringify(labels)}`);
+                }
+            },
         },
         {
             content: "the deal number rendered",
@@ -322,6 +332,110 @@ registry.category("web_tour.tours").add("postlog_workbench_tour", {
             content: "and left the 30-minutes-off row as a suggestion",
             trigger: ".mv-fuzzy__tabs button:contains('Suggestions') span:contains('1')",
         },
+
+        // ---- overruns --------------------------------------------------------
+        // One row is already attached from the drawer-refresh block, against a
+        // schedule that sold one unit. Attaching the second puts two spots on
+        // it, which is the overrun.
+        {
+            // Restore left us on the Removed tab, which is empty now - so there
+            // is no table to select from until we go back to All.
+            content: "back to All, where the rows are",
+            trigger: ".mv-fuzzy__tabs button:contains('All')",
+            run: "click",
+        },
+        {
+            content: "select every row on the page",
+            trigger: ".mv-fuzzy__table thead input[type=checkbox]",
+            run: "click",
+        },
+        {
+            // The second row is 30 minutes outside its rotation, so this asks
+            // for confirmation - accepted by the stub installed above.
+            content: "attach the remaining suggestion to the same schedule",
+            trigger: ".mv-fuzzy__bulk-actions button:contains('Attach Suggested')",
+            run: "click",
+        },
+        {
+            content: "two spots on a one-unit schedule is an overrun",
+            trigger: ".mv-fuzzy__tabs button:contains('Overruns') span:contains('2')",
+        },
+        {
+            content: "and they leave Matched rather than hiding in it",
+            trigger: ".mv-fuzzy__tabs button:contains('Matched') span:contains('0')",
+        },
+        {
+            content: "open the Overruns tab",
+            trigger: ".mv-fuzzy__tabs button:contains('Overruns')",
+            run: "click",
+        },
+        {
+            content: "the status badge reads Overrun",
+            trigger: ".mv-fuzzy__table .mv-fuzzy__status--overrun:contains('Overrun')",
+        },
+        {
+            content: "the schedule carries a +1 badge - units over, not rows",
+            trigger: ".mv-fuzzy__table .mv-fuzzy__overrun-badge:contains('+1')",
+        },
+        {
+            content: "and Info names the schedule's figures",
+            trigger: ".mv-fuzzy__table .mv-fuzzy__reason:contains('1 unit(s) but 2 postlog(s)')",
+        },
+        {
+            content: "open the drawer on an overrun row",
+            trigger: ".mv-fuzzy__table tbody tr:first-child button:contains('Review')",
+            run: "click",
+        },
+        {
+            content: "the drawer explains the overrun",
+            trigger: ".mv-fuzzy__overrun-panel:contains('Units sold')",
+        },
+        {
+            content: "and lists both spots on the schedule",
+            trigger: ".mv-fuzzy__overrun-list li:nth-child(2)",
+        },
+        {
+            content: "with Remove offered where the problem is stated",
+            trigger: ".mv-fuzzy__overrun-panel button:contains('Remove this spot')",
+        },
+        {
+            content: "leave the drawer again",
+            trigger: ".mv-postlog-drawer-nav button[title='Close']",
+            run: "click",
+        },
+        {
+            content: "back to All",
+            trigger: ".mv-fuzzy__tabs button:contains('All')",
+            run: "click",
+        },
+
+        // ---- run preemptions -------------------------------------------------
+        // The fixture schedule sold one unit and has two spots attached, so a
+        // run writes units_preempted = -1. Negatives are the point: units_aired
+        // is available - preempted, so -1 makes it report the 2 that aired
+        // rather than the 1 that was sold.
+        {
+            content: "run preemptions for the week",
+            trigger: ".mv-fuzzy__bulk-actions button:contains('Run Preemptions')",
+            run: "click",
+        },
+        {
+            content: "it asked before writing, and said what it would assert",
+            trigger: ".mv-fuzzy__bulk-actions",
+            run() {
+                const asked = window.__tourConfirms || [];
+                if (!asked.some((m) => m.includes("marked fully preempted"))) {
+                    throw new Error(
+                        `Run Preemptions did not preview the full-preemption count: ${JSON.stringify(asked)}`
+                    );
+                }
+            },
+        },
+        {
+            content: "and reported what it wrote",
+            trigger: ".o_notification:contains('Preemptions run on')",
+        },
+
 
         {
             content: "open the upload wizard",

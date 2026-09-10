@@ -641,6 +641,470 @@ class TestPostlogMatching(TransactionCase):
         self.assertEqual(counts['matched'], 1)
         self.assertEqual(counts['suggestions'], 1)
 
+    # ------------------------------------------------------------------
+    # Overruns: more aired against a schedule than it sold
+    # ------------------------------------------------------------------
+
+    def _overrun_schedule(self, units):
+        """A sold schedule matching the standard fixture, with a real cap."""
+        return self.env['mv.schedules'].create({
+            'deal_parent': self.deal.id,
+            'week': self.week,
+            'start_time': 'v_09_00a',
+            'end_time': 'v_10_00a',
+            'days_allowed': [Command.set(self.monday.ids)],
+            'rate': 100.0,
+            'status': 'sold',
+            'units_available': units,
+        })
+
+    def _attach(self, postlog, schedule):
+        return self.Postlog.fuzzy_match_apply([{
+            'postlog_id': postlog.id,
+            'schedule_id': schedule.id,
+            'source': 'manual',
+            'confirmed_override': True,
+        }], self.program.id, self.week.isoformat())
+
+    def test_overrun_flags_every_row_on_the_schedule(self):
+        """Not a chosen subset - all of them.
+
+        The fix is to remove the surplus airings, and you cannot choose which
+        to remove without seeing all of them. Mirrors A-8131 in production:
+        2 units sold, 3 spots aired.
+        """
+        schedule = self._overrun_schedule(2)
+        rows = self.Postlog.browse()
+        for hour in ('09:10:00', '09:20:00', '09:30:00'):
+            postlog = self._create_postlog(air_time=hour)
+            self._attach(postlog, schedule)
+            rows |= postlog
+
+        self.assertEqual(schedule.postlog_attached_count, 3)
+        self.assertEqual(schedule.postlog_overrun_amount, 1)
+        self.assertTrue(all(rows.mapped('is_overrun')), rows.mapped('is_overrun'))
+
+        for row in rows:
+            self.assertIn('2 unit(s)', row.info)
+            self.assertIn('3 postlog(s)', row.info)
+            self.assertIn('over by 1', row.info)
+
+    def test_within_capacity_flags_nothing(self):
+        schedule = self._overrun_schedule(5)
+        postlog = self._create_postlog()
+        self._attach(postlog, schedule)
+        self.assertEqual(schedule.postlog_attached_count, 1)
+        self.assertEqual(schedule.postlog_overrun_amount, 0)
+        self.assertFalse(postlog.is_overrun)
+        self.assertFalse(postlog.info)
+
+    def test_a_schedule_with_no_units_recorded_never_overruns(self):
+        """units_available of 0 means "not recorded", not "sold nothing".
+
+        Every real schedule carries units, so this changes nothing in
+        production - but flagging every spot on a schedule whose units are
+        simply missing would be a false positive on incomplete data. It is also
+        what makes six prelog tests fail.
+        """
+        schedule = self._overrun_schedule(0)
+        postlog = self._create_postlog()
+        self._attach(postlog, schedule)
+        self.assertEqual(schedule.postlog_attached_count, 1)
+        self.assertEqual(schedule.postlog_overrun_amount, 0)
+        self.assertFalse(postlog.is_overrun)
+
+    def test_overruns_are_carved_out_of_matched(self):
+        """All = Matched + Unmatched + Overruns.
+
+        An overrun row is attached, so it would otherwise sit in Matched - where
+        it hides among the rows that need no attention.
+        """
+        schedule = self._overrun_schedule(1)
+        first = self._create_postlog(air_time='09:10:00')
+        second = self._create_postlog(air_time='09:20:00')
+        self._attach(first, schedule)
+        self._attach(second, schedule)
+
+        counts = self._search()['counts']
+        self.assertEqual(counts['overruns'], 2)
+        self.assertEqual(counts['matched'], 0)
+        self.assertEqual(
+            counts['all'],
+            counts['matched'] + counts['unmatched'] + counts['overruns'],
+        )
+        tab = self._search(status='overruns')['rows']
+        self.assertEqual({row['id'] for row in tab}, {first.id, second.id})
+        self.assertEqual(tab[0]['status'], 'overrun')
+        self.assertEqual(tab[0]['status_label'], 'Overrun')
+        self.assertEqual(tab[0]['attached']['overrun_amount'], 1)
+        self.assertNotIn(first.id, [r['id'] for r in self._search(status='matched')['rows']])
+
+    def test_removing_a_surplus_spot_clears_the_overrun(self):
+        """The intended fix: bonus airings come out of reconciliation."""
+        schedule = self._overrun_schedule(2)
+        rows = self.Postlog.browse()
+        for hour in ('09:10:00', '09:20:00', '09:30:00'):
+            postlog = self._create_postlog(air_time=hour)
+            self._attach(postlog, schedule)
+            rows |= postlog
+        self.assertEqual(schedule.postlog_overrun_amount, 1)
+
+        self.Postlog.fuzzy_match_set_removed(
+            rows[-1].ids, True, self.program.id, self.week.isoformat(),
+        )
+        self.assertEqual(schedule.postlog_attached_count, 2)
+        self.assertEqual(schedule.postlog_overrun_amount, 0)
+        self.assertFalse(any(rows.mapped('is_overrun')))
+        # and the line this feature wrote is gone with it
+        self.assertFalse(rows[0].info)
+
+    def test_detaching_clears_the_flag_on_the_row_that_left(self):
+        """The recompute cannot reach it - once detached the row no longer
+        knows which schedule it was on - so detach clears its own flag."""
+        schedule = self._overrun_schedule(1)
+        first = self._create_postlog(air_time='09:10:00')
+        second = self._create_postlog(air_time='09:20:00')
+        self._attach(first, schedule)
+        self._attach(second, schedule)
+        self.assertTrue(first.is_overrun)
+
+        self.Postlog.fuzzy_match_detach(
+            second.ids, self.program.id, self.week.isoformat(),
+        )
+        self.assertFalse(second.is_overrun)
+        self.assertEqual(schedule.postlog_attached_count, 1)
+        self.assertEqual(schedule.postlog_overrun_amount, 0)
+        self.assertFalse(first.is_overrun)
+
+    def test_refresh_picks_up_a_units_change_nobody_told_us_about(self):
+        """The reason Refresh recomputes its whole scope.
+
+        Editing units_available moves no postlog, so no write path of ours
+        fires - and this module deliberately does not override write() on the
+        shared mv.schedules model.
+        """
+        schedule = self._overrun_schedule(5)
+        rows = self.Postlog.browse()
+        for hour in ('09:10:00', '09:20:00', '09:30:00'):
+            postlog = self._create_postlog(air_time=hour)
+            self._attach(postlog, schedule)
+            rows |= postlog
+        self.assertEqual(schedule.postlog_overrun_amount, 0)
+
+        schedule.units_available = 1          # somebody corrects the deal
+        self.assertEqual(schedule.postlog_overrun_amount, 0, 'still stale')
+
+        result = self.Postlog.fuzzy_match_refresh(
+            self.program.id, self.week.isoformat(),
+        )
+        self.assertEqual(schedule.postlog_overrun_amount, 2)
+        self.assertTrue(all(rows.mapped('is_overrun')))
+
+        # And it has to SAY so. There were no unmatched rows, so Refresh does no
+        # matching work and used to report "nothing to re-check" while fixing
+        # exactly what it was asked to.
+        self.assertEqual(result['overruns']['flagged'], 3)
+        self.assertEqual(result['overruns']['schedules'], 1)
+        self.assertIn('3 row(s) now overrun', result['message'])
+
+    def test_refresh_reports_overruns_it_cleared(self):
+        """The case Kiyana hit: add a unit, refresh, overrun resolved."""
+        schedule = self._overrun_schedule(2)
+        rows = self.Postlog.browse()
+        for hour in ('09:10:00', '09:20:00', '09:30:00'):
+            postlog = self._create_postlog(air_time=hour)
+            self._attach(postlog, schedule)
+            rows |= postlog
+        self.assertEqual(schedule.postlog_overrun_amount, 1)
+
+        schedule.units_available = 3          # the fix
+        result = self.Postlog.fuzzy_match_refresh(
+            self.program.id, self.week.isoformat(),
+        )
+        self.assertEqual(schedule.postlog_overrun_amount, 0)
+        self.assertFalse(any(rows.mapped('is_overrun')))
+        self.assertEqual(result['overruns']['cleared'], 3)
+        self.assertIn('3 row(s) no longer overrun', result['message'])
+        self.assertIn('1 schedule(s)', result['message'])
+
+    def test_refresh_with_genuinely_nothing_to_do_says_so(self):
+        schedule = self._overrun_schedule(5)
+        self._attach(self._create_postlog(), schedule)
+        result = self.Postlog.fuzzy_match_refresh(
+            self.program.id, self.week.isoformat(),
+        )
+        self.assertEqual(result['overruns']['flagged'], 0)
+        self.assertEqual(result['overruns']['cleared'], 0)
+        self.assertNotIn('Overruns updated', result['message'])
+
+    def test_deleting_a_row_frees_capacity(self):
+        schedule = self._overrun_schedule(1)
+        first = self._create_postlog(air_time='09:10:00')
+        second = self._create_postlog(air_time='09:20:00')
+        self._attach(first, schedule)
+        self._attach(second, schedule)
+        self.assertEqual(schedule.postlog_overrun_amount, 1)
+
+        second.unlink()
+        self.assertEqual(schedule.postlog_attached_count, 1)
+        self.assertEqual(schedule.postlog_overrun_amount, 0)
+        self.assertFalse(first.is_overrun)
+
+    def test_the_import_stores_overruns_without_anyone_asking(self):
+        """Attachment happens at import, so the overrun has to as well."""
+        schedule = self._overrun_schedule(1)
+        self.schedule.status = 'canceled'      # leave one candidate only
+        first = self._create_postlog(air_time='09:10:00')
+        second = self._create_postlog(air_time='09:20:00')
+        self.Postlog._postlog_store_matching(
+            first | second, self.program, self.week, attach=True,
+        )
+        self.assertEqual(
+            (first | second).mapped('schedule'), schedule,
+            'fixture precondition: both rows should attach to the capped schedule',
+        )
+        self.assertEqual(schedule.postlog_overrun_amount, 1)
+        self.assertTrue(all((first | second).mapped('is_overrun')))
+
+    def test_the_drawer_lists_the_schedules_other_spots(self):
+        schedule = self._overrun_schedule(2)
+        for hour in ('09:10:00', '09:20:00', '09:30:00'):
+            self._attach(self._create_postlog(air_time=hour), schedule)
+
+        details = self.Postlog.fuzzy_workbench_overrun_details(schedule.id)
+        self.assertEqual(details['capped_units'], 2)
+        self.assertEqual(details['total_postlogs'], 3)
+        self.assertEqual(details['overrun_amount'], 1)
+        self.assertEqual(len(details['all_postlog_ids']), 3)
+        self.assertEqual(len(details['postlogs']), 3)
+        # air order, and standard time - the panel must read like the list
+        self.assertEqual(
+            [p['air_time'] for p in details['postlogs']],
+            ['09:10:00 AM', '09:20:00 AM', '09:30:00 AM'],
+        )
+        self.assertFalse(self.Postlog.fuzzy_workbench_overrun_details(0))
+
+    def test_the_workbench_ignores_rows_from_the_bundle_pipeline(self):
+        """phase28 handles Bundle and PP programs and writes mv.spot_data too.
+
+        It sets no import_program, no import_week_value and no match status, so
+        such a row has no place in this workbench - it belongs to a different
+        pipeline. Program and Week are optional filters, so with neither set the
+        scope used to be the whole table.
+        """
+        ours = self._create_postlog()
+        theirs = self.Postlog.create({
+            'broadcast_network': 'Bundle Network',
+            'network_deal_number': 'SPT-100',
+            'air_date': self.week,
+            'air_time': '09:30:00',
+            'length': 'v_30',
+            'spot_rate': 100.0,
+            'status': 'aired',
+        })
+        self.assertFalse(theirs.import_program)
+        self.assertFalse(theirs.import_match_status)
+
+        # unfiltered - the case that used to leak
+        unfiltered = self.Postlog.fuzzy_match_search(False, False)
+        ids = [row['id'] for row in unfiltered['rows']]
+        self.assertIn(ours.id, ids)
+        self.assertNotIn(theirs.id, ids)
+
+    # ------------------------------------------------------------------
+    # Run Preemptions: units sold that did not air
+    # ------------------------------------------------------------------
+
+    def test_preemption_sets_available_minus_the_spot_count(self):
+        schedule = self._overrun_schedule(5)
+        for hour in ('09:10:00', '09:20:00'):
+            self._attach(self._create_postlog(air_time=hour), schedule)
+
+        result = self.Postlog.fuzzy_run_preemptions(
+            self.program.id, self.week.isoformat(),
+        )
+        self.assertEqual(schedule.units_preempted, 3.0)
+        # units_aired needs no code of ours - the existing formula turns
+        # available - preempted back into the spot count.
+        self.assertEqual(schedule.units_aired, 2.0)
+        self.assertIn('Preemptions run on', result['message'])
+
+    def test_a_schedule_with_no_spots_is_fully_preempted(self):
+        """The case the whole feature exists for, and the one a scope limited
+        to attached rows could never express."""
+        schedule = self._overrun_schedule(4)
+        self._create_postlog()          # exists, but attached elsewhere
+        self.Postlog.fuzzy_run_preemptions(
+            self.program.id, self.week.isoformat(),
+        )
+        self.assertEqual(schedule.units_preempted, 4.0)
+        self.assertEqual(schedule.units_aired, 0.0)
+
+    def test_an_overrun_schedule_goes_negative_and_aired_equals_the_count(self):
+        """Negatives are kept deliberately.
+
+        Clamping at zero would make a schedule that over-delivered report fewer
+        aired units than actually aired: with 2 sold and 3 aired, a clamped
+        preemption of 0 gives aired=2. Allowing -1 gives aired=3, which is what
+        happened.
+        """
+        schedule = self._overrun_schedule(2)
+        for hour in ('09:10:00', '09:20:00', '09:30:00'):
+            self._attach(self._create_postlog(air_time=hour), schedule)
+
+        self.Postlog.fuzzy_run_preemptions(
+            self.program.id, self.week.isoformat(),
+        )
+        self.assertEqual(schedule.units_preempted, -1.0)
+        self.assertEqual(schedule.units_aired, 3.0)
+
+    def test_removed_spots_do_not_count_as_aired(self):
+        schedule = self._overrun_schedule(5)
+        rows = self.Postlog.browse()
+        for hour in ('09:10:00', '09:20:00', '09:30:00'):
+            postlog = self._create_postlog(air_time=hour)
+            self._attach(postlog, schedule)
+            rows |= postlog
+        self.Postlog.fuzzy_match_set_removed(
+            rows[-1].ids, True, self.program.id, self.week.isoformat(),
+        )
+        self.Postlog.fuzzy_run_preemptions(
+            self.program.id, self.week.isoformat(),
+        )
+        # 5 sold, 3 aired, one of them removed as a duplicate -> 2 aired
+        self.assertEqual(schedule.units_preempted, 3.0)
+        self.assertEqual(schedule.units_aired, 2.0)
+
+    def test_canceled_schedules_are_included(self):
+        schedule = self._overrun_schedule(3)
+        schedule.status = 'canceled'
+        self.Postlog.fuzzy_run_preemptions(
+            self.program.id, self.week.isoformat(),
+        )
+        self.assertEqual(schedule.units_preempted, 3.0)
+        # and Units Aired stays 0 for a canceled schedule regardless
+        self.assertEqual(schedule.units_aired, 0.0)
+
+    def test_the_preview_counts_what_is_about_to_be_asserted(self):
+        with_spots = self._overrun_schedule(5)
+        self._attach(self._create_postlog(), with_spots)
+        self._overrun_schedule(7)       # no spots
+        self._overrun_schedule(2)       # no spots
+
+        preview = self.Postlog.fuzzy_preemption_preview(
+            self.program.id, self.week.isoformat(),
+        )
+        self.assertEqual(preview['with_spots'], 1)
+        self.assertEqual(preview['without_spots'], 2 + 1)   # + the base fixture
+        self.assertEqual(preview['schedules'], preview['with_spots'] + preview['without_spots'])
+        # the units figure is what makes the number meaningful
+        self.assertGreaterEqual(preview['units_without_spots'], 9)
+
+    def test_a_zero_preemption_is_still_recorded(self):
+        """Spot count equal to units sold gives preempted = 0, and that has to
+        be WRITTEN, not skipped.
+
+        A NULL means "never run" and 0.0 means "run, nothing preempted" - a
+        distinction the check field depends on, and one the ORM cannot make
+        because it returns 0.0 for both. Skipping the write left 148 of 781
+        schedules NULL on a real run, with nothing in their chatter.
+        """
+        schedule = self._overrun_schedule(2)
+        for hour in ('09:10:00', '09:20:00'):
+            self._attach(self._create_postlog(air_time=hour), schedule)
+
+        self.env.cr.execute(
+            'SELECT units_preempted FROM mv_schedules WHERE id = %s', (schedule.id,))
+        self.assertIsNone(self.env.cr.fetchone()[0], 'precondition: never run')
+
+        result = self.Postlog.fuzzy_run_preemptions(
+            self.program.id, self.week.isoformat(),
+        )
+        self.env.cr.flush()
+        self.env.cr.execute(
+            'SELECT units_preempted FROM mv_schedules WHERE id = %s', (schedule.id,))
+        stored = self.env.cr.fetchone()[0]
+        self.assertIsNotNone(stored, 'a zero preemption must be recorded, not skipped')
+        self.assertEqual(stored, 0.0)
+        self.assertEqual(schedule.units_aired, 2.0)
+        self.assertGreaterEqual(result['updated'], 1)
+
+    def test_never_run_badge_appears_until_a_run_then_goes_quiet(self):
+        """Units Preempted is a Float, so 0.0 covers both "nothing preempted"
+        and "never run". This is the field that separates them - and it is
+        empty, hence invisible, once there is nothing to say.
+        """
+        schedule = self._overrun_schedule(2)
+        for hour in ('09:10:00', '09:20:00'):
+            self._attach(self._create_postlog(air_time=hour), schedule)
+        self.assertEqual(schedule.units_preempted_state, 'Never run')
+
+        self.Postlog.fuzzy_run_preemptions(
+            self.program.id, self.week.isoformat(),
+        )
+        schedule.invalidate_recordset(['units_preempted_state'])
+        # a real 0.0 now, so the badge has nothing left to warn about
+        self.assertEqual(schedule.units_preempted, 0.0)
+        self.assertEqual(schedule.units_preempted_state, '')
+
+    def test_a_zero_preemption_is_logged_even_though_tracking_cannot_see_it(self):
+        """NULL -> 0.0 is a real change that Odoo's tracking is blind to.
+
+        Tracking compares Python values, and a NULL Float reads as 0.0, so the
+        write looks like a no-op to it. On a real week that left 145 of 158
+        zero-preemption schedules with nothing in their chatter.
+        """
+        schedule = self._overrun_schedule(2)
+        for hour in ('09:10:00', '09:20:00'):
+            self._attach(self._create_postlog(air_time=hour), schedule)
+        before = self.env['mail.message'].search_count(
+            [('model', '=', 'mv.schedules'), ('res_id', '=', schedule.id)])
+
+        self.Postlog.fuzzy_run_preemptions(
+            self.program.id, self.week.isoformat(),
+        )
+        self.assertEqual(schedule.units_preempted, 0.0)
+        messages = self.env['mail.message'].search(
+            [('model', '=', 'mv.schedules'), ('res_id', '=', schedule.id)],
+            order='id desc',
+        )
+        self.assertGreater(len(messages), before, 'the run must leave a trace')
+        body = messages[0].body
+        self.assertIn('Preemptions run', body)
+        self.assertIn('never run', body)
+        # names who and when, like every other audit line in this module
+        self.assertIn(self.env.user.display_name, body)
+        # Real markup, not escaped tags rendered as text. Odoo's sanitiser
+        # normalises <br/> to <br>, so match the tag rather than the spelling.
+        self.assertIn('<br', body)
+        self.assertNotIn('&lt;br', body)
+        self.assertIn('\u2192', body)      # a real arrow, not &#8594;
+        self.assertIn('unit(s) sold', body)
+
+    def test_running_preemptions_is_idempotent(self):
+        schedule = self._overrun_schedule(5)
+        self._attach(self._create_postlog(), schedule)
+        first = self.Postlog.fuzzy_run_preemptions(
+            self.program.id, self.week.isoformat(),
+        )
+        second = self.Postlog.fuzzy_run_preemptions(
+            self.program.id, self.week.isoformat(),
+        )
+        self.assertTrue(first['updated'])
+        self.assertEqual(second['updated'], 0)
+        self.assertEqual(second['unchanged'], first['updated'] + first['unchanged'])
+
+    def test_preemptions_refuse_to_run_without_a_program_and_week(self):
+        """Preemption is settled one week at a time - both filters are optional
+        in this workbench, and an unscoped run would rewrite every schedule."""
+        for program_id, week in ((False, False),
+                                 (self.program.id, False),
+                                 (False, self.week.isoformat())):
+            with self.assertRaises(UserError):
+                self.Postlog.fuzzy_run_preemptions(program_id, week)
+            with self.assertRaises(UserError):
+                self.Postlog.fuzzy_preemption_preview(program_id, week)
+
     def test_the_status_badge_reports_the_two_stored_codes(self):
         """The badge says what is stored: Matched or Unmatched.
 
@@ -754,7 +1218,7 @@ class TestPostlogMatching(TransactionCase):
         self.assertEqual(
             set(self._search()['counts']),
             {'all', 'matched', 'unmatched', 'suggestions', 'no_suggestion',
-             'removed'},
+             'removed', 'overruns'},
         )
         self.assertNotIn('versions', self.Postlog.fuzzy_match_get_options())
 

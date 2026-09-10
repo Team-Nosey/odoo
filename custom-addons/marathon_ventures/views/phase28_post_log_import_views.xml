@@ -118,10 +118,14 @@
     </field>
   </record>
 
-  <menuitem id="menu_mv_post_log_import"
-            name="Import Post Log"
-            parent="menu_mv_operations"
-            action="action_mv_post_log_import"
-            sequence="20"/>
+  <!-- Menu removed 2026-09-09. This model is NOT dead - it is the handler the
+       Import Postlog wizard routes Bundle and PP programs to. The menu was a
+       second front door straight into it, which skipped everything the wizard
+       adds: the Program Type routing, the bundle name-to-code map, and its
+       refusal to guess when a Bundle Program is not in that map. One entry
+       point, so a file cannot reach the wrong engine.
+
+       The action and views are kept: they are how a queued phase28 job is
+       inspected, and the wizard's notification refers people to it. -->
 
 </odoo>
