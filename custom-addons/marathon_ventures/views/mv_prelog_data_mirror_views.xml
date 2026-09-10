@@ -93,5 +93,7 @@
     <field name="view_mode">list,form</field>
   </record>
 
-  <menuitem id="menu_mv_prelog_data_mirror" name="Prelog Data Mirror" parent="menu_mv_operations" action="action_mv_prelog_data_mirror" sequence="12"/>
+  <!-- Menu removed 2026-09-09: mv.prelog_data_mirror holds no rows and nothing
+       writes to it. The action and views stay, so anything that opens the model
+       directly still works and the menu is one line to restore. -->
 </odoo>
