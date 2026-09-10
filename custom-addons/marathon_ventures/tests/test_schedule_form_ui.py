@@ -65,3 +65,12 @@ class TestScheduleFormUI(HttpCase):
             'mv_new_schedule_form_tour',
             login='admin',
         )
+
+    def test_schedule_list_columns(self):
+        """The list's columns, and what its show/hide menu offers."""
+        action = self.env.ref('marathon_ventures.action_mv_schedules')
+        self.start_tour(
+            '/odoo/action-%s' % action.id,
+            'mv_schedule_list_columns_tour',
+            login='admin',
+        )

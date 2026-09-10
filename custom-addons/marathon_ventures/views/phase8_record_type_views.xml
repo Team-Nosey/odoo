@@ -27,14 +27,10 @@
     </field>
   </record>
 
-  <record id="view_mv_schedules_list_phase8_rt" model="ir.ui.view">
-    <field name="name">mv.schedules.list.phase8.recordtype</field>
-    <field name="model">mv.schedules</field>
-    <field name="inherit_id" ref="marathon_ventures.view_mv_schedules_list"/>
-    <field name="arch" type="xml">
-      <xpath expr="//list" position="inside">
-        <field name="sf_record_type" optional="show"/>
-      </xpath>
-    </field>
-  </record>
+  <!-- The Schedules list contribution that used to live here appended
+       Record Type after every other column. The list is now declared in one
+       place, alphabetically by label, so Record Type is in
+       view_mv_schedules_list_phase1 with the rest; appending it from here
+       would have put one field out of order and made the menu's ordering
+       look arbitrary. -->
 </odoo>

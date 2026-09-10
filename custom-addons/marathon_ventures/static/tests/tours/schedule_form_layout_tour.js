@@ -340,3 +340,88 @@ registry.category("web_tour.tours").add("mv_new_schedule_form_tour", {
         },
     ],
 });
+
+/**
+ * The Schedules list: which columns show, and what the menu offers.
+ *
+ * The list used to open with seven columns nobody could hide and none of
+ * which held a value, and its show/hide menu offered ten fields. It now
+ * offers every field the form shows - the Details tab plus Additional
+ * Fields - so the menu and the record agree on what a Schedule has.
+ */
+registry.category("web_tour.tours").add("mv_schedule_list_columns_tour", {
+    steps: () => [
+        {
+            content: "the schedules list rendered",
+            trigger: ".o_list_view .o_list_table thead th[data-name='name']",
+        },
+        {
+            // The exact visible set, in order. Alphabetical by label after
+            // the record name, which is how the arch declares them and so
+            // also how the menu lists them.
+            content: "the list opens on the thirteen columns that matter",
+            trigger: ".o_list_table thead th[data-name]",
+            run() {
+                const shown = [...document.querySelectorAll(
+                    ".o_list_table thead th[data-name]")]
+                    .map((th) => th.dataset.name)
+                    .filter((n) => n !== "0");
+                const expected = [
+                    "name", "kf_account", "kf_advertiser", "deal_parent",
+                    "program", "rate", "start_time", "status", "total_dollars",
+                    "units_aired", "units_available", "units_preempted", "week",
+                ];
+                const missing = expected.filter((f) => !shown.includes(f));
+                const extra = shown.filter((f) => !expected.includes(f));
+                if (missing.length || extra.length) {
+                    throw new Error(
+                        `missing=${JSON.stringify(missing)} `
+                        + `extra=${JSON.stringify(extra)} `
+                        + `shown=${JSON.stringify(shown)}`);
+                }
+            },
+        },
+        {
+            // The seven the generator seeded and nobody could turn off.
+            content: "and none of the blank columns it used to force on you",
+            trigger: ".o_list_table thead",
+            run() {
+                const gone = ["adus_estimated", "adus_generated", "access_code",
+                              "account_advertiser_program", "account_advertiser",
+                              "account_brand_program",
+                              "actual_total_000_primary_demo"];
+                const still = gone.filter((f) => document.querySelector(
+                    `.o_list_table thead th[data-name='${f}']`));
+                if (still.length) {
+                    throw new Error(`still forced on: ${JSON.stringify(still)}`);
+                }
+            },
+        },
+        {
+            content: "open the show/hide columns menu",
+            trigger: ".o_optional_columns_dropdown_toggle",
+            run: "click",
+        },
+        {
+            // The menu is portalled out of the list and rendered at the end of
+            // the body, so it cannot be reached through the toggle's own
+            // container.
+            content: "it offers every field the form shows",
+            trigger: ".o-dropdown--menu .o-checkbox input[type=checkbox]",
+            run() {
+                const boxes = [...document.querySelectorAll(
+                    ".o-dropdown--menu .o-checkbox input[type=checkbox]")];
+                // 43 form fields. name is not optional - it is the row's
+                // identity and hiding every column would leave nothing to
+                // click - and currency_id and test carry no column at all.
+                if (boxes.length !== 43) {
+                    throw new Error(`the menu offers ${boxes.length}, expected 43`);
+                }
+                const checked = boxes.filter((b) => b.checked).length;
+                if (checked !== 12) {
+                    throw new Error(`${checked} are checked, expected 12`);
+                }
+            },
+        },
+    ],
+});
