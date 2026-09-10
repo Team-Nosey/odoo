@@ -2,7 +2,7 @@
 {
     'name': 'Marathon Ventures',
     'summary': 'Salesforce -> Odoo 19 migration of Marathon Ventures CRM/Sales/Traffic schema.',
-    'version': '19.0.1.2.8',
+    'version': '19.0.1.2.9',
     'license': 'LGPL-3',
     'author': 'Marathon Ventures (generated)',
     'website': '',
@@ -162,6 +162,8 @@
             'marathon_ventures/static/src/js/hiatus_deals/hiatus_deals.js',
             'marathon_ventures/static/src/js/hiatus_deals/hiatus_deals.xml',
             'marathon_ventures/static/src/scss/prelog_fuzzy_matching.scss',
+            'marathon_ventures/static/src/scss/mv_schedule_header.scss',
+            'marathon_ventures/static/src/js/schedule_header/mv_schedule_header.js',
             'marathon_ventures/static/src/js/prelog_fuzzy_matching/prelog_fuzzy_matching.js',
             'marathon_ventures/static/src/js/prelog_fuzzy_matching/prelog_fuzzy_matching.xml',
             # Postlog Workbench. Reuses the prelog stylesheet for the shared
@@ -199,6 +201,7 @@
             # Browser tour driving the Postlog Workbench; see
             # tests/test_postlog_workbench_ui.py
             'marathon_ventures/static/tests/tours/postlog_workbench_tour.js',
+            'marathon_ventures/static/tests/tours/schedule_form_layout_tour.js',
         ],
     },
     'installable': True,

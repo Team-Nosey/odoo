@@ -1,0 +1,26 @@
+/* ============================================================================
+   SCHEDULE FORM - header buttons on the breadcrumb row
+   ----------------------------------------------------------------------------
+   mv_schedule_header.js moves the rendered .o_statusbar_buttons container out
+   of the sheet's header band and appends it to .o_control_panel_breadcrumbs,
+   so Save and Cancel/Uncancel Schedule sit beside the record name.
+
+   All this file does is give the relocated container button spacing suited
+   to the breadcrumb row. Hiding the emptied band is done in the JS, next to
+   the move that empties it - see the note there on why it needs !important.
+   ============================================================================ */
+
+/* The relocated container. Scoped to the breadcrumb row, so the ordinary
+   in-sheet .o_statusbar_buttons on every other form is untouched. */
+.o_control_panel_breadcrumbs > .mv-schedule-header-actions {
+    margin-left: 12px;
+    gap: 8px;
+    flex-wrap: nowrap;
+}
+
+.o_control_panel_breadcrumbs > .mv-schedule-header-actions .btn {
+    font-size: 13px;
+    font-weight: 500;
+    padding: 4px 14px;
+    white-space: nowrap;
+}

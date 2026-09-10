@@ -51,10 +51,12 @@ const RELATED_TAB_CONFIG = {
         "ir.attachment": ["name", "mv_bundle_paperwork_kind", "create_date"],
     },
     "mv.schedules": {
-        "mv.spot_data":          [],
-        "mv.spot_data_mirror":   [],
-        "mv.prelog_data":        [],
-        "mv.prelog_data_mirror": [],
+        // The two mirror models were listed here and rendered two more
+        // "No related records found" cards. Nothing writes to either of
+        // them - their menus came out for the same reason - so they only
+        // ever said empty twice over.
+        "mv.spot_data":  [],
+        "mv.prelog_data": [],
     },
     "mv.traffic": {
         "mv.split": ["isci", "days_allowed", "active"]
