@@ -29,6 +29,15 @@ export class MvPrelogFuzzyMatching extends Component {
             filters: { programId: false, weekStart: "", version: false, importJobId: false },
             activeTab: "all",
             counts: { all: 0, matched: 0, unmatched: 0, suggestions: 0, no_suggestion: 0, removed: 0, overruns: 0 },
+            // Dollar totals per tab, plus the total for the current
+            // view (tab + search + filters). Both come from the server
+            // over the FULL scope - never sum state.rows, that is only
+            // the 200-row page.
+            dollars: { all: 0, matched: 0, unmatched: 0, suggestions: 0, no_suggestion: 0, removed: 0, overruns: 0 },
+            filteredDollars: 0,
+            // False until a search returns totals, so the badge can
+            // show "—" rather than a misleading $0.00.
+            dollarsAvailable: false,
             searchTerm: "",
             airDate: "",
             issueFilter: "",
@@ -174,6 +183,21 @@ export class MvPrelogFuzzyMatching extends Component {
             this.state.page = result.page || 0;
             this.state.pages = result.pages || 0;
             this.state.counts = result.counts || this.state.counts;
+            // Distinguish "server sent 0" from "server sent nothing".
+            // Without this a stale Python process (assets reload on
+            // file change, Python only on restart) silently rendered
+            // $0.00, which reads as a data bug rather than a stale
+            // backend.
+            this.state.dollarsAvailable = result.filtered_dollars !== undefined;
+            this.state.dollars = result.dollars || this.state.dollars;
+            this.state.filteredDollars = Number(result.filtered_dollars || 0);
+            if (!this.state.dollarsAvailable) {
+                console.warn(
+                    "[MV] fuzzy_match_search returned no dollar totals - " +
+                    "the Odoo Python process is probably running older " +
+                    "code than the assets. Restart Odoo.",
+                );
+            }
             this.state.hasFiltered = true;
         } finally {
             if (requestId === this.requestId) this.state.querying = false;
@@ -717,6 +741,103 @@ export class MvPrelogFuzzyMatching extends Component {
             minimumFractionDigits: 2, maximumFractionDigits: 2,
         }) : "";
     }
+    // ---- Total Dollars ------------------------------------------
+    // Server-computed over the full scope. `filteredDollars` follows
+    // the tab + search + air-date + issue filter, so it is what the
+    // user is actually looking at; `dollars.all` is the whole upload
+    // and is what should reconcile against the file.
+    formatDollars(value) {
+        const n = Number(value || 0);
+        return n.toLocaleString(undefined, {
+            minimumFractionDigits: 2, maximumFractionDigits: 2,
+        });
+    }
+
+    get totalDollarsLabel() {
+        // "—" not "$0.00" when the backend didn't supply totals, so a
+        // stale server is visibly different from a genuine zero.
+        if (!this.state.dollarsAvailable) return "—";
+        return `$${this.formatDollars(this.state.filteredDollars)}`;
+    }
+
+    get totalDollarsTitle() {
+        if (!this.state.dollarsAvailable) {
+            return "Totals unavailable: the server did not return dollar " +
+                   "figures. Restart Odoo so the Python process picks up " +
+                   "the current code.";
+        }
+        return this.dollarsReconcileTitle ||
+               "Total for the rows currently in view (all pages, not just this one).";
+    }
+
+    /** The uploaded file's own total, when a specific upload is in view. */
+    get uploadedDollars() {
+        const up = this.state.latestUpload;
+        if (!up || !this.state.filters.importJobId) return null;
+        if (up.id !== this.state.filters.importJobId) return null;
+        return Number(up.total_rate_amount || 0);
+    }
+
+    get uploadedDollarsLabel() {
+        const v = this.uploadedDollars;
+        return v === null ? "" : `$${this.formatDollars(v)}`;
+    }
+
+    /**
+     * Reconcile the processed total against the file total.
+     *
+     * Compared against dollars.all (the whole upload) rather than the
+     * filtered figure, and only when the view is scoped to that single
+     * import job - otherwise the two describe different row sets and a
+     * mismatch would be meaningless.
+     *
+     * A tolerance of half a cent absorbs float noise from summing
+     * thousands of rows.
+     */
+    get dollarsReconcile() {
+        const uploaded = this.uploadedDollars;
+        if (uploaded === null) return null;
+        const processed = Number(this.state.dollars.all || 0);
+        const diff = processed - uploaded;
+        const matches = Math.abs(diff) < 0.005;
+        const errors = Number(
+            (this.state.latestUpload && this.state.latestUpload.error_count) || 0,
+        );
+        return {
+            matches,
+            diff,
+            errors,
+            processedLabel: `$${this.formatDollars(processed)}`,
+            uploadedLabel: `$${this.formatDollars(uploaded)}`,
+            diffLabel: `${diff > 0 ? "+" : "-"}$${this.formatDollars(Math.abs(diff))}`,
+            // A gap is EXPECTED when rows failed to import: the job
+            // totals every parsed row, including ones that never
+            // became records.
+            explained: !matches && errors > 0,
+        };
+    }
+
+    get dollarsReconcileClass() {
+        const r = this.dollarsReconcile;
+        if (!r) return "";
+        if (r.matches) return "mv-fuzzy__dollars-ok";
+        return r.explained
+            ? "mv-fuzzy__dollars-warn"
+            : "mv-fuzzy__dollars-bad";
+    }
+
+    get dollarsReconcileTitle() {
+        const r = this.dollarsReconcile;
+        if (!r) return "";
+        if (r.matches) {
+            return `Processed total matches the uploaded file (${r.uploadedLabel}).`;
+        }
+        if (r.explained) {
+            return `Uploaded file totalled ${r.uploadedLabel} but ${r.errors} row(s) failed to import, so ${r.processedLabel} was processed (${r.diffLabel}).`;
+        }
+        return `Processed ${r.processedLabel} but the uploaded file totalled ${r.uploadedLabel} (${r.diffLabel}). No rows errored, so this gap needs investigating.`;
+    }
+
     statusBadge(row) { return `mv-fuzzy__status mv-fuzzy__status--${row.status}`; }
     reasonFallback(row) {
         // An attached row must never read "Ready to attach" - it is

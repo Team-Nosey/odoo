@@ -1,0 +1,382 @@
+// Hiatus Deals - OWL port of the Salesforce hiatusDealComponent styling.
+// SLDS classes are replaced with Bootstrap + these hd-* rules; the visual
+// result (filter row, agency bar, green/red row shading, calendar popover)
+// is kept as close to the SF page as practical.
+
+.hd-root {
+    position: relative;
+    padding: 0 1rem 1.5rem;
+
+    // SCROLLING. A client action is mounted into a FIXED-HEIGHT flex
+    // container (.o_content), so a tall page does not make the browser
+    // window scroll - it just gets clipped at the fold, which is why the
+    // results table showed only its first couple of rows with no way to
+    // reach the rest. Owning the scroll here fixes it.
+    height: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+
+    // ── page heading ────────────────────────────────────────────
+    .hd-page-head {
+        display: flex;
+        align-items: center;
+        padding: 1rem 0 0.75rem;
+        border-bottom: 1px solid var(--o-color-border, #dee2e6);
+        margin-bottom: 1rem;
+    }
+    .hd-title {
+        margin: 0;
+        font-size: 1.35rem;
+        font-weight: 700;
+        color: var(--o-color-text, #212529);
+    }
+
+    // ── loading overlay ─────────────────────────────────────────
+    .hd-spinner-overlay {
+        position: absolute;
+        inset: 0;
+        z-index: 20;
+        display: flex;
+        align-items: flex-start;
+        justify-content: center;
+        padding-top: 6rem;
+        background: rgba(255, 255, 255, 0.6);
+        pointer-events: none;
+        color: #6c757d;
+    }
+
+    .hd-muted { color: #6c757d; }
+    .hd-small { font-size: 0.82rem; }
+
+    .hd-field {
+        flex: 1 1 260px;
+        min-width: 220px;
+        &_date { flex: 0 0 250px; min-width: 250px; }
+    }
+    .hd-label {
+        display: block;
+        margin-bottom: 0.25rem;
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: #495057;
+    }
+
+    // ── date picker ─────────────────────────────────────────────
+    .hd-datepicker { position: relative; }
+    .hd-datepicker-dropdown {
+        position: absolute;
+        z-index: 41;
+        top: calc(100% + 4px);
+        left: 0;
+        width: 20rem;
+        padding: 0.75rem;
+        border: 1px solid var(--o-color-border, #dee2e6);
+        border-radius: 8px;
+        background: #fff;
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.16);
+    }
+    .hd-cal-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 0.5rem;
+    }
+    .hd-cal-month { font-weight: 700; font-size: 0.9rem; }
+
+    .hd-calendar-table {
+        width: 100%;
+        table-layout: fixed;
+        border-collapse: collapse;
+        th {
+            padding: 0.2rem 0;
+            font-size: 0.72rem;
+            font-weight: 600;
+            text-align: center;
+            color: #6c757d;
+            abbr { text-decoration: none; border: 0; }
+        }
+    }
+    .hd-cal-cell {
+        padding: 0.35rem 0;
+        text-align: center;
+        font-size: 0.82rem;
+        border-radius: 4px;
+        cursor: pointer;
+        &.hd-in-month:hover { background: #eef3ff; }
+        &.hd-out-month { color: #c6ccd4; cursor: default; }
+        &.hd-selected {
+            background: #0d6efd;
+            color: #fff;
+            font-weight: 700;
+            &:hover { background: #0b5ed7; }
+        }
+    }
+
+    // ── results ─────────────────────────────────────────────────
+    .hd-results { margin-top: 1.25rem; }
+    .hd-results-header {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin-bottom: 0.35rem;
+    }
+    .hd-results-title { margin: 0; font-size: 1.05rem; font-weight: 700; }
+    .hd-table-actions { margin-bottom: 0.5rem; }
+
+    .hd-table-wrapper {
+        // Own scroll box, vertical AND horizontal. Without a bounded
+        // height the table relied on an ancestor scrolling, which it
+        // did not - so only the first rows were reachable. Sticky
+        // headers work against THIS box.
+        max-height: 62vh;
+        overflow: auto;
+        border: 1px solid var(--o-color-border, #dee2e6);
+        border-radius: 8px;
+    }
+    .hd-results-table {
+        margin: 0;
+        font-size: 0.84rem;
+        thead th {
+            position: sticky;
+            top: 0;
+            z-index: 2;
+            background: #333d51;
+            box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.15);
+            color: #fff;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        td { vertical-align: middle; }
+    }
+    .hd-col-check { width: 2.5rem; text-align: center; }
+    .hd-col-narrow { width: 5rem; }
+    .hd-col-remove { width: 5rem; }
+
+    // Row shading: green = every selected date already hiatused,
+    // red = not yet. Mirrors hd-cell_hiatused / hd-cell_open in the LWC.
+    .hd-cell {
+        &_hiatused { background: #e6f4ea; }
+        &_open { background: #fdecea; }
+    }
+    .hd-row-selected > td { outline: 1px solid rgba(13, 110, 253, 0.35); }
+
+    .hd-group-header {
+        margin: -0.15rem -0.35rem 0.25rem;
+        padding: 0.15rem 0.35rem;
+        font-weight: 700;
+        font-size: 0.8rem;
+        color: #333d51;
+        background: #eceff4;
+        border-radius: 3px;
+    }
+
+    .hd-empty {
+        padding: 0.9rem 1rem;
+        border: 1px solid var(--o-color-border, #dee2e6);
+        border-radius: 8px;
+        background: #f8f9fa;
+        color: #6c757d;
+        font-size: 0.86rem;
+    }
+
+    // ── filters card: ONE row - Date, Program, Advertiser,
+    //    Agency, Search. Date gates the other three.
+    .hd-filters-card {
+        margin-bottom: 1rem;
+        border: 1px solid var(--o-color-border, #dee2e6);
+        border-radius: 8px;
+        background: #fff;
+
+        &_ready { border-color: #cfd8ea; }
+        &_gated { background: #fcfcfd; }
+    }
+    .hd-filters-head {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        padding: 0.6rem 1rem;
+        border-bottom: 1px solid var(--o-color-border, #dee2e6);
+    }
+    .hd-step-num {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 1.4rem;
+        height: 1.4rem;
+        border-radius: 50%;
+        background: #1f2937;
+        color: #fff;
+        font-size: 0.76rem;
+        font-weight: 700;
+        flex: 0 0 auto;
+    }
+    .hd-step-title { font-weight: 700; font-size: 1rem; }
+    .hd-step-hint { margin-left: 0.25rem; }
+    .hd-req {
+        padding: 0.1rem 0.45rem;
+        border-radius: 4px;
+        background: #fdecea;
+        color: #b32d2d;
+        font-size: 0.68rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+    }
+
+    // The single filter row. Fields flex evenly; Search hugs the right.
+    .hd-filters-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: flex-end;
+        gap: 0.75rem 1rem;
+        padding: 0.85rem 1rem 0.6rem;
+    }
+    .hd-filters-gate {
+        padding: 0 1rem 0.75rem;
+        color: #6c757d;
+        font-size: 0.82rem;
+    }
+
+    // ── date chips ──────────────────────────────────────────────
+    .hd-pills {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.35rem;
+        padding: 0 1rem 0.75rem;
+    }
+    .hd-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+        padding: 0.1rem 0.2rem 0.1rem 0.5rem;
+        border: 1px solid #b9c6e8;
+        border-radius: 12px;
+        background: #eef3ff;
+        font-size: 0.78rem;
+        font-variant-numeric: tabular-nums;
+    }
+    .hd-pill-x {
+        border: 0;
+        background: none;
+        padding: 0 0.25rem;
+        line-height: 1;
+        color: #5a6b8c;
+        &:hover { color: #b32d2d; }
+    }
+
+    // ── multi-select (Program / Advertiser / Agency) ────────────
+    // ONE set of rules for all three, which is what keeps the UI
+    // consistent - they share the HiatusMultiSelect component.
+    .hd-ms { position: relative; }
+    .hd-ms-trigger {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        text-align: left;
+        cursor: pointer;
+        &:disabled { cursor: not-allowed; background: #f1f3f5; }
+        &_active { border-color: #7d95c9; background: #f7f9ff; }
+    }
+    .hd-ms-summary {
+        flex: 1 1 auto;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .hd-ms-count {
+        flex: 0 0 auto;
+        min-width: 1.2rem;
+        padding: 0 0.35rem;
+        border-radius: 10px;
+        background: #333d51;
+        color: #fff;
+        font-size: 0.72rem;
+        font-weight: 700;
+        text-align: center;
+    }
+    .hd-ms-lead { flex: 0 0 auto; color: #b3541e; }
+    .hd-ms-chevron { flex: 0 0 auto; font-size: 0.7rem; color: #6c757d; }
+
+    .hd-ms-backdrop { position: fixed; inset: 0; z-index: 40; }
+    .hd-ms-dropdown {
+        position: absolute;
+        z-index: 41;
+        top: calc(100% + 4px);
+        left: 0;
+        width: 100%;
+        min-width: 16rem;
+        border: 1px solid var(--o-color-border, #dee2e6);
+        border-radius: 8px;
+        background: #fff;
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.16);
+    }
+    .hd-ms-search {
+        position: relative;
+        padding: 0.5rem 0.5rem 0.35rem;
+        i {
+            position: absolute;
+            top: 50%;
+            left: 0.9rem;
+            transform: translateY(-40%);
+            color: #6c757d;
+            font-size: 0.78rem;
+            pointer-events: none;
+        }
+        input { padding-left: 1.9rem; }
+    }
+    .hd-ms-actions {
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+        justify-content: space-between;
+        padding: 0 0.5rem 0.25rem;
+    }
+    .hd-ms-list {
+        list-style: none;
+        margin: 0;
+        padding: 0.15rem 0;
+        max-height: 14rem;
+        overflow-y: auto;
+        border-top: 1px solid var(--o-color-border, #dee2e6);
+    }
+    .hd-ms-option {
+        display: flex;
+        align-items: center;
+        gap: 0.45rem;
+        padding: 0.3rem 0.75rem;
+        font-size: 0.84rem;
+        cursor: pointer;
+        &:hover { background: #eef3ff; }
+        &_muted { color: #6c757d; cursor: default; &:hover { background: none; } }
+        input { pointer-events: none; }
+    }
+    .hd-ms-option-label {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .hd-ms-foot {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+        padding: 0.45rem 0.6rem;
+        border-top: 1px solid var(--o-color-border, #dee2e6);
+    }
+
+    .hd-field_actions { flex: 0 0 auto; }
+    .hd-search-btn { min-width: 8rem; }
+}
+
+@media (max-width: 900px) {
+    .hd-root {
+        // Narrow screens: the single filter row stacks, and each field
+        // takes the full width so the multi-select triggers stay usable.
+        .hd-filters-row { flex-direction: column; align-items: stretch; }
+        .hd-field, .hd-field_date { flex: 1 1 100%; min-width: 0; }
+        .hd-field_actions .hd-search-btn { width: 100%; }
+        .hd-table-wrapper { max-height: none; }
+    }
+}

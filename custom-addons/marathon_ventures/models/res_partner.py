@@ -14,6 +14,32 @@ _logger = logging.getLogger(__name__)
 class ResPartner(models.Model):
     _inherit = 'res.partner'
 
+    # Salesforce had TWO objects, Account and Contact. Both were migrated
+    # onto Odoo's single res.partner model, which stores companies and
+    # individuals in one table discriminated by `is_company`. Because
+    # ir.model holds exactly one row per registered Python model, model
+    # pickers (Report Types -> Base Model, the Report Builder, export
+    # dialogs) can only ever show ONE entry for it.
+    #
+    # Labelling that entry with BOTH business terms is what makes it
+    # findable either way: ir.model._rec_names_search is ['name','model'],
+    # so this label matches a search for "account" OR "contact", and the
+    # technical name still matches "partner" / "res.partner".
+    #
+    # Naming it just 'Account' was tried and rejected - it removed the
+    # word "contact" from the label, so searching Odoo's own standard
+    # term returned nothing.
+    #
+    # ir.model.name is REFLECTED from _description on every module load
+    # (ir_model._reflect_model_params), so renaming the record in the UI
+    # or via XML data is overwritten on the next upgrade. This is the
+    # only durable place to set it.
+    #
+    # Which of the two a given Report Type actually reports on is set by
+    # mv.report.type.partner_scope (Record Scope), which injects
+    # is_company into the run domain - see phase14_report_types.py.
+    _description = 'Account / Contact'
+
     # === SF Metadata ===
     sf_external_id = fields.Char(string='SF External ID', index=True, copy=False)
     sf_legacy_data = fields.Json(string='SF Legacy Payload')

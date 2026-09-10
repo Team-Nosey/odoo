@@ -146,5 +146,7 @@
     <field name="view_mode">list,form</field>
   </record>
 
-  <menuitem id="menu_mv_prelog_data" name="Prelog Data" parent="menu_mv_operations" action="action_mv_prelog_data" sequence="12"/>
+  <!-- Menu removed 2026-09-09: the Prelog Workbench is how this data is worked,
+       and the raw list duplicated it. The action is deliberately kept - the
+       workbench's Review button opens this form - it just has no menu now. -->
 </odoo>

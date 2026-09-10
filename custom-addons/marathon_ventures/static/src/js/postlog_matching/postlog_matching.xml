@@ -76,7 +76,37 @@
             <button t-att-class="state.activeTab === 'suggestions' ? 'active' : ''" t-on-click="() => this.setTab('suggestions')">Suggestions <span t-esc="state.counts.suggestions"/></button>
             <button t-att-class="state.activeTab === 'no_suggestion' ? 'active' : ''" t-on-click="() => this.setTab('no_suggestion')">No Suggestion <span t-esc="state.counts.no_suggestion"/></button>
             <button t-att-class="state.activeTab === 'removed' ? 'active' : ''" t-on-click="() => this.setTab('removed')">Removed <span t-esc="state.counts.removed"/></button>
+            <button t-att-class="state.activeTab === 'overruns' ? 'active' : ''" t-on-click="() => this.setTab('overruns')">Overruns <span t-esc="state.counts.overruns"/></button>
+
+            <!-- Total Dollars for the current view. Server-side SQL
+                 aggregate over the whole scope, not the visible page. -->
+            <div class="mv-fuzzy__dollars" t-att-class="dollarsReconcileClass"
+                 t-att-title="totalDollarsTitle">
+              <span class="mv-fuzzy__dollars-label">Total Dollars:</span>
+              <span class="mv-fuzzy__dollars-value" t-esc="totalDollarsLabel"/>
+              <t t-if="state.dollarsAvailable and dollarsReconcile">
+                <i t-if="dollarsReconcile.matches"
+                   class="fa fa-check-circle mv-fuzzy__dollars-icon"/>
+                <i t-else="" class="fa fa-exclamation-triangle mv-fuzzy__dollars-icon"/>
+              </t>
+            </div>
           </nav>
+
+          <div class="mv-fuzzy__dollars-note" t-if="state.dollarsAvailable and dollarsReconcile and !dollarsReconcile.matches">
+            <i class="fa fa-exclamation-triangle me-1"/>
+            <t t-if="dollarsReconcile.explained">
+              Uploaded file totalled <strong t-esc="dollarsReconcile.uploadedLabel"/>,
+              processed <strong t-esc="dollarsReconcile.processedLabel"/>
+              (<t t-esc="dollarsReconcile.diffLabel"/>) —
+              <t t-esc="dollarsReconcile.errors"/> row(s) failed to import.
+            </t>
+            <t t-else="">
+              Processed <strong t-esc="dollarsReconcile.processedLabel"/> but the
+              uploaded file totalled <strong t-esc="dollarsReconcile.uploadedLabel"/>
+              (<t t-esc="dollarsReconcile.diffLabel"/>). No rows errored, so this
+              gap needs investigating.
+            </t>
+          </div>
 
           <div class="mv-fuzzy__searchbar">
             <label class="mv-fuzzy__search">
@@ -113,6 +143,15 @@
                       t-att-disabled="state.refreshing or state.querying or state.mutating"
                       title="Re-check unmatched rows against the current Schedules">
                 <i class="fa fa-refresh me-1" t-att-class="state.refreshing ? 'fa-spin' : ''"/><t t-esc="state.refreshing ? 'Re-checking…' : 'Refresh'"/>
+              </button>
+              <!-- Whole-week action, like Refresh: it needs no selection, so it
+                   sits ahead of the buttons that do. Preemption is settled per
+                   schedule, and the checkboxes select spots - so a selection
+                   would have no sensible meaning here. -->
+              <button class="btn btn-outline-secondary btn-sm" t-on-click="onRunPreemptions"
+                      t-att-disabled="state.preempting or state.querying or state.mutating or state.refreshing"
+                      title="Set Units Preempted on every schedule for this Program and week">
+                <i class="fa fa-calculator me-1" t-att-class="state.preempting ? 'fa-spin' : ''"/><t t-esc="state.preempting ? 'Running…' : 'Run Preemptions'"/>
               </button>
               <span t-if="selectedCount"><strong t-esc="selectedCount"/> selected</span>
               <button class="btn btn-success btn-sm" t-on-click="attachSuggested"
@@ -181,6 +220,13 @@
                   <td>
                     <a t-if="row.attached" class="mv-fuzzy__record-link" target="_blank" rel="noopener"
                        t-att-href="scheduleOpenUrl(row.attached)" t-on-click.stop="() => {}" t-esc="row.attached.name"/>
+                    <!-- How many units over capacity the SCHEDULE is - a
+                         different figure from the Overruns tab, which counts
+                         rows to review. Shared .mv-fuzzy__overrun-badge style,
+                         unchanged. -->
+                    <span t-if="row.attached and row.attached.overrun_amount > 0"
+                          class="mv-fuzzy__overrun-badge"
+                          t-att-title="'Schedule is over capacity by ' + row.attached.overrun_amount + ' unit(s)'">+<t t-esc="row.attached.overrun_amount"/></span>
                   </td>
                   <td t-esc="row.network"/>
                   <!-- Standard time, matching the postlog files themselves and
@@ -251,6 +297,54 @@
             <dt>Deal #</dt><dd t-esc="state.drawerRow.deal_number"/>
             <dt>Rate</dt><dd>$<t t-esc="formatRate(state.drawerRow.rate)"/></dd>
           </dl></section>
+
+          <!-- Overrun context. Placed above the attachment because it is the
+               reason the row is in front of you: the schedule it is attached to
+               had no room for it. Styling is the shared .mv-fuzzy__overrun-*
+               classes, unchanged. -->
+          <section class="mv-fuzzy__overrun-panel"
+                   t-if="state.drawerRow.is_overrun and state.drawerOverrun">
+            <div class="mv-fuzzy__overrun-panel-head">
+              <span class="mv-fuzzy__overrun-panel-title">Overruns</span>
+              <span class="mv-fuzzy__overrun-panel-stat">
+                Postlogs attached: <strong t-esc="state.drawerOverrun.total_postlogs"/>
+              </span>
+              <span class="mv-fuzzy__overrun-panel-stat">
+                Units sold: <strong t-esc="state.drawerOverrun.capped_units"/>
+              </span>
+              <span class="mv-fuzzy__overrun-panel-stat">
+                Over by: <strong t-esc="state.drawerOverrun.overrun_amount"/>
+              </span>
+            </div>
+            <ul class="mv-fuzzy__overrun-list">
+              <!-- Two children: the shared style lays these out with
+                   space-between, so the name goes left and the airing right.
+                   The airing is muted, matching prelog - the list colour reads
+                   as a link, and only the name is one. -->
+              <li t-foreach="state.drawerOverrun.postlogs" t-as="p" t-key="p.id">
+                <span t-esc="p.name"/>
+                <span class="mv-fuzzy__muted">
+                  <t t-esc="p.air_date"/> <t t-esc="p.air_time"/>
+                </span>
+              </li>
+            </ul>
+            <div class="mv-fuzzy__overrun-panel-foot">
+              <!-- Shown only when the list is truncated: prelog shows it
+                   always, which offers "view all" when all of them are already
+                   on screen. -->
+              <button type="button" class="mv-fuzzy__linklike"
+                      t-if="state.drawerOverrun.has_more"
+                      t-on-click="() => this.viewAllOverrunPostlogs()">view all <t t-esc="state.drawerOverrun.total_postlogs"/></button>
+              <!-- The fix, where the problem is stated: surplus airings are
+                   bonus or duplicate spots, and Remove is what takes them out
+                   of reconciliation. -->
+              <button class="btn btn-outline-danger btn-sm"
+                      t-on-click="() => this.setRemoved(true, state.drawerRow)"
+                      t-att-disabled="state.mutating">
+                <i class="fa fa-ban me-1"/>Remove this spot
+              </button>
+            </div>
+          </section>
 
           <section t-if="state.drawerRow.attached">
             <h3>Attached Schedule</h3>

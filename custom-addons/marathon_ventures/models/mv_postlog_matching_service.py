@@ -26,6 +26,8 @@ import io
 import re
 from datetime import datetime
 
+from markupsafe import Markup
+
 from odoo import models, fields, api, _
 from odoo.exceptions import UserError
 from odoo.tools.float_utils import float_compare
@@ -127,10 +129,20 @@ class MvPostlogMatching(models.Model):
         # a filtered, ordered, LIMITed query. Nothing is matched here - the
         # import already did that and stored the verdict.
         counts = self._postlog_stored_counts(base_domain)
+        dollars = self._postlog_stored_dollars(base_domain)
         domain = self._postlog_stored_domain(
             base_domain, status, issue_filter, air_date, search_term,
         )
         total = self.search_count(domain)
+        # Dollar value of the CURRENT view (tab + search + air date +
+        # issue filter) across every matching row. Aggregated in SQL,
+        # so it is the full scope and not the visible page.
+        filtered_groups = self._read_group(domain, [], ['spot_rate:sum'])
+        filtered_dollars = 0.0
+        if filtered_groups:
+            _v = filtered_groups[0]
+            _v = _v[0] if isinstance(_v, (list, tuple)) else _v
+            filtered_dollars = round(float(_v or 0.0), 2)
         if total:
             offset = min(offset, ((total - 1) // limit) * limit)
         else:
@@ -150,6 +162,8 @@ class MvPostlogMatching(models.Model):
             'page': (offset // limit) + 1 if total else 0,
             'pages': ((total + limit - 1) // limit) if total else 0,
             'counts': counts,
+            'dollars': dollars,
+            'filtered_dollars': filtered_dollars,
         }
 
     @api.model
@@ -315,6 +329,7 @@ class MvPostlogMatching(models.Model):
 
         now = fields.Datetime.now()
         user_name = self.env.user.display_name
+        touched_schedules = set()
         for postlog, schedule, source, previous_schedule in prepared:
             audit_line = _(
                 'Schedule %(schedule)s attached from Postlog Workbench '
@@ -340,6 +355,10 @@ class MvPostlogMatching(models.Model):
                 for part in (postlog.import_match_detail, audit_line)
                 if part
             )
+            touched_schedules.update(
+                sid for sid in (schedule.id, previous_schedule.id if previous_schedule else False)
+                if sid
+            )
             postlog.write({
                 'schedule': schedule.id,
                 'import_match_status': 'matched',
@@ -351,6 +370,10 @@ class MvPostlogMatching(models.Model):
                 'info': False,
                 'possible_schedules': False,
             })
+
+        # Both ends of a move: the schedule gaining a row may go over capacity,
+        # the one losing it may come back under.
+        self._recompute_postlog_overruns(touched_schedules)
 
         return {
             'attached': len(prepared),
@@ -468,6 +491,7 @@ class MvPostlogMatching(models.Model):
         )
         now = fields.Datetime.now()
         detached = 0
+        touched_schedules = set(postlogs.mapped('schedule').ids)
         for postlog in postlogs.filtered('schedule'):
             line = _(
                 'Schedule %(schedule)s detached in Postlog Workbench '
@@ -480,6 +504,10 @@ class MvPostlogMatching(models.Model):
             postlog.write({
                 'schedule': False,
                 'import_match_status': 'unmatched',
+                # No schedule, so no overrun. Cleared here rather than by the
+                # recompute: once detached the row no longer knows which
+                # schedule it left, so the recompute cannot reach it.
+                'is_overrun': False,
                 'import_match_detail': '\n'.join(
                     part for part in (postlog.import_match_detail, line) if part
                 ),
@@ -495,9 +523,264 @@ class MvPostlogMatching(models.Model):
                 attach=False,
             )
             detached += 1
+        self._recompute_postlog_overruns(touched_schedules)
         return {
             'updated': detached,
             'message': _('%(count)s schedule(s) detached.') % {'count': detached},
+        }
+
+    @api.model
+    def _postlog_overrun_summary_text(self, overruns):
+        """The overrun half of a Refresh message, or '' when nothing moved.
+
+        Correcting a schedule's units is a Refresh that does no matching work,
+        so this is the only thing it has to report - and saying nothing made it
+        look like Refresh had ignored the fix.
+        """
+        if not overruns:
+            return ''
+        parts = []
+        if overruns.get('cleared'):
+            parts.append(_('%(n)s row(s) no longer overrun') % {
+                'n': overruns['cleared'],
+            })
+        if overruns.get('flagged'):
+            parts.append(_('%(n)s row(s) now overrun') % {
+                'n': overruns['flagged'],
+            })
+        if not parts:
+            return ''
+        return ' ' + _('Overruns updated on %(schedules)s schedule(s): %(detail)s.') % {
+            'schedules': overruns.get('schedules') or 0,
+            'detail': _(' and ').join(parts),
+        }
+
+    @api.model
+    def fuzzy_preemption_preview(self, program_id, week_start):
+        """What Run Preemptions would write, without writing it.
+
+        The count of schedules with no matched spots is the number worth seeing
+        first: those get marked FULLY preempted, and if that figure looks wrong
+        it is a matching gap being about to become a business fact.
+        """
+        self._fuzzy_check_access()
+        program, selected_week = self._fuzzy_validate_optional_filters(
+            program_id, week_start,
+        )
+        if not program or not selected_week:
+            raise UserError(_(
+                'Choose a Program and a Week before running preemptions - '
+                'preemption is settled one week at a time.'
+            ))
+        schedules = self._postlog_preemption_scope(program, selected_week)
+        without = schedules.filtered(lambda s: not s.postlog_attached_count)
+        return {
+            'program': program.display_name or '',
+            'week': fields.Date.to_string(selected_week),
+            'schedules': len(schedules),
+            'with_spots': len(schedules) - len(without),
+            'without_spots': len(without),
+            'units_without_spots': int(sum(
+                s.units_available or 0 for s in without
+            )),
+        }
+
+    @api.model
+    def fuzzy_run_preemptions(self, program_id, week_start):
+        """Set Units Preempted for every schedule in a Program/week.
+
+            units_preempted = units_available - matched postlog spot count
+
+        Negatives are kept on purpose. `units_aired` already computes
+        `units_available - units_preempted`, so allowing the subtraction to go
+        below zero makes Units Aired equal the matched spot count exactly - in
+        every case, including a schedule that over-delivered. Clamping here
+        would make an over-delivered schedule under-report what aired.
+
+        Run by hand, after the week has been worked, because only a person
+        knows whether the week is complete enough for "no spots matched" to
+        mean "nothing aired" rather than "we have not finished matching".
+
+        Canceled schedules are included: their Units Aired is 0 regardless, and
+        recording the preemption is the point.
+        """
+        self._fuzzy_check_access()
+        program, selected_week = self._fuzzy_validate_optional_filters(
+            program_id, week_start,
+        )
+        if not program or not selected_week:
+            raise UserError(_(
+                'Choose a Program and a Week before running preemptions - '
+                'preemption is settled one week at a time.'
+            ))
+
+        now = fields.Datetime.now()
+        schedules = self._postlog_preemption_scope(program, selected_week)
+        if not schedules:
+            return {
+                'updated': 0, 'unchanged': 0, 'fully_preempted': 0,
+                'message': _('No schedules for %(program)s, week %(week)s.') % {
+                    'program': program.display_name,
+                    'week': fields.Date.to_string(selected_week),
+                },
+            }
+
+        # Both fields are already tracked - phase18 flips tracking on every
+        # stored scalar of every mv.* model - so the change itself is logged
+        # with its author. This only labels the message, so a run is
+        # distinguishable from somebody editing the field by hand.
+        schedules._track_set_log_message(
+            _('Preemptions run from the Postlog Workbench.')
+        )
+
+        # A NULL units_preempted means "preemptions have never been run"; 0.0
+        # means "run, and nothing was preempted". The ORM cannot tell them
+        # apart - it hands back 0.0 for both - so the distinction is read from
+        # the column. Without this, every schedule whose spot count exactly
+        # equals its units sold was skipped as "already correct" and left NULL:
+        # 148 of 781 on week 2026-08-17, silently unrecorded.
+        # Flush first: pending ORM writes are not in the table yet, so a raw
+        # read behind them sees stale NULLs - which made a second run treat
+        # everything the first run wrote as never-run and write it all again.
+        self.env.flush_all()
+        self.env.cr.execute(
+            "SELECT id FROM mv_schedules "
+            " WHERE id IN %s AND units_preempted IS NULL",
+            (tuple(schedules.ids),),
+        )
+        never_run = {row[0] for row in self.env.cr.fetchall()}
+
+        updated = unchanged = fully = 0
+        for schedule in schedules:
+            aired = schedule.postlog_attached_count or 0
+            preempted = float(schedule.units_available or 0.0) - aired
+            if not aired:
+                fully += 1
+            if schedule.id not in never_run and schedule.units_preempted == preempted:
+                unchanged += 1
+                continue
+
+            # Odoo's field tracking compares PYTHON values, and a NULL Float
+            # reads as 0.0 - so writing a real 0.0 over a NULL is a change the
+            # database records and tracking cannot see. On week 2026-08-17 that
+            # silently skipped the chatter on 145 of 158 zero-preemption
+            # schedules. Where tracking will not fire, say it explicitly.
+            invisible_to_tracking = (
+                schedule.id in never_run
+                and schedule.units_preempted == preempted
+            )
+            schedule.units_preempted = preempted
+            updated += 1
+            if invisible_to_tracking:
+                # Markup, not a plain str: message_post escapes an unmarked
+                # string, which would render the tags as literal text.
+                #
+                # Second line mirrors the format of the tracking messages the
+                # other schedules get ("Units Preempted: 3 -> 0"), so both
+                # kinds of entry read alike in the same log.
+                schedule.message_post(
+                    body=Markup(
+                        '<b>%(title)s</b> %(intro)s<br/>%(detail)s'
+                    ) % {
+                        'title': _('Preemptions run'),
+                        'intro': _(
+                            'from the Postlog Workbench by %(user)s on %(date)s.'
+                        ) % {
+                            'user': self.env.user.display_name,
+                            'date': fields.Datetime.to_string(now),
+                        },
+                        'detail': _(
+                            'Units Preempted: never run \u2192 %(units)s '
+                            '\u00b7 %(available)s unit(s) sold, %(aired)s '
+                            'matched postlog spot(s).'
+                        ) % {
+                            'units': '%g' % preempted,
+                            'available': '%g' % float(schedule.units_available or 0.0),
+                            'aired': aired,
+                        },
+                    },
+                    message_type='notification',
+                    subtype_xmlid='mail.mt_note',
+                )
+
+        return {
+            'updated': updated,
+            'unchanged': unchanged,
+            'fully_preempted': fully,
+            'message': _(
+                'Preemptions run on %(total)s schedule(s) for %(program)s, '
+                'week %(week)s: %(updated)s updated, %(unchanged)s already '
+                'correct, %(fully)s with no matched spots.'
+            ) % {
+                'total': len(schedules),
+                'program': program.display_name,
+                'week': fields.Date.to_string(selected_week),
+                'updated': updated,
+                'unchanged': unchanged,
+                'fully': fully,
+            },
+        }
+
+    @api.model
+    def _postlog_preemption_scope(self, program, selected_week):
+        """Every schedule for one Program and week - canceled included.
+
+        The whole week, not just the schedules our upload happened to touch: a
+        schedule that received no spots at all is the most preempted case there
+        is, and scoping to attached rows could never express it.
+        """
+        return self.env['mv.schedules'].search([
+            ('week', '=', selected_week),
+            ('deal_parent.program', '=', program.id),
+        ], order='name asc')
+
+    @api.model
+    def fuzzy_workbench_overrun_details(self, schedule_id, limit=10):
+        """Every postlog attached to one schedule, for the drawer's panel.
+
+        The operator's next question after "this schedule is over by 2" is
+        "by which spots?" - and answering it is what lets them pick which to
+        remove. Attached rows only: capacity is consumed by what aired, not by
+        what we are still guessing at.
+        """
+        self._fuzzy_check_access()
+        schedule = self.env['mv.schedules'].browse(
+            self._fuzzy_int(schedule_id)
+        ).exists()
+        if not schedule:
+            return False
+
+        attached = self.search(
+            [('schedule', '=', schedule.id), ('removed', '=', False)],
+            order='air_date asc, air_time asc, id asc',
+        )
+        capped = int(schedule.units_available or 0)
+        total = len(attached)
+        preview = attached[:max(self._fuzzy_int(limit, default=10), 1)]
+        return {
+            'schedule_id': schedule.id,
+            'schedule_name': schedule.display_name or '',
+            'capped_units': capped,
+            'total_postlogs': total,
+            # max(0, ...) and the zero-cap rule, same as the recompute - the
+            # panel must not disagree with the badge that opened it.
+            'overrun_amount': max(0, total - capped) if capped > 0 else 0,
+            # Ids for every attached row, so "view all" can use a plain
+            # [('id','in',[...])] domain instead of rebuilding filter logic.
+            'all_postlog_ids': attached.ids,
+            'postlogs': [
+                {
+                    'id': postlog.id,
+                    'name': postlog.name or '',
+                    'air_date': (
+                        fields.Date.to_string(postlog.air_date)
+                        if postlog.air_date else ''
+                    ),
+                    'air_time': self._postlog_format_air_time(postlog.air_time),
+                }
+                for postlog in preview
+            ],
+            'has_more': total > len(preview),
         }
 
     @api.model
@@ -541,6 +824,9 @@ class MvPostlogMatching(models.Model):
         now = fields.Datetime.now()
         user_name = self.env.user.display_name
         restored = self.browse()
+        # Captured before the writes: removing clears the attachment, so the
+        # schedule id is gone by the time we would ask for it.
+        touched_schedules = set(postlogs.mapped('schedule').ids)
 
         for postlog in postlogs:
             if removed:
@@ -555,6 +841,9 @@ class MvPostlogMatching(models.Model):
                     'removed': True,
                     'schedule': False,
                     'import_match_status': 'unmatched',
+                    # See fuzzy_match_detach: a row that loses its schedule
+                    # clears its own flag.
+                    'is_overrun': False,
                     # A removed row makes no claim about matching: no
                     # suggestion, no candidates, no flags, no Info. The Status
                     # badge says Removed and that is the whole story.
@@ -587,6 +876,10 @@ class MvPostlogMatching(models.Model):
             # so a mixed selection costs one candidate query per group rather
             # than one per row.
             self._postlog_store_matching(restored, False, False, attach=True)
+            # Restoring can re-attach, which consumes capacity again.
+            touched_schedules.update(restored.mapped('schedule').ids)
+
+        self._recompute_postlog_overruns(touched_schedules)
 
         return {
             'updated': len(postlogs),
@@ -628,17 +921,31 @@ class MvPostlogMatching(models.Model):
             program_id,
             week_start,
         )
-        domain = self._fuzzy_postlog_domain(
+        scope_domain = self._fuzzy_postlog_domain(
             program.id if program else False,
             selected_week,
             unmatched_only=False,
             import_job_id=import_job_id,
-        ) + [('import_match_status', '=', 'unmatched')]
+        )
+        # Before the early return below: a week with nothing left to
+        # re-match is the normal case, and it is exactly when someone has
+        # edited a schedule's units and needs the overruns to catch up.
+        # Anything this Refresh goes on to attach is recomputed by the matcher
+        # itself.
+        overruns = self._recompute_postlog_overruns(
+            self.search(scope_domain).mapped('schedule').ids
+        )
+
+        domain = scope_domain + [('import_match_status', '=', 'unmatched')]
         postlogs = self.search(domain)
         if not postlogs:
             return {
                 'checked': 0, 'attached': 0, 'unmatched': 0,
-                'message': _('Nothing to re-check - no unmatched Postlog rows.'),
+                'message': (
+                    _('No unmatched Postlog rows to re-check.')
+                    + self._postlog_overrun_summary_text(overruns)
+                ),
+                'overruns': overruns,
             }
 
         before = set(postlogs.ids)
@@ -675,7 +982,8 @@ class MvPostlogMatching(models.Model):
                 'checked': len(before),
                 'attached': len(attached),
                 'unmatched': len(before) - len(attached),
-            },
+            } + self._postlog_overrun_summary_text(overruns),
+            'overruns': overruns,
         }
 
     @api.model
@@ -784,6 +1092,16 @@ class MvPostlogMatching(models.Model):
             ),
             'submitted_by': job.submitted_by_id.display_name,
             'row_count': len(job.postlog_ids),
+            # Authoritative "as uploaded" figure so the workbench total
+            # can be verified against the file. The job sums spot_rate
+            # for EVERY parsed row including ones that failed to create,
+            # so when error_count > 0 this legitimately exceeds the live
+            # sum; error_count is exposed so the UI can say why.
+            'total_rate_amount': job.total_rate_amount or 0.0,
+            'matched_rate_amount': job.matched_rate_amount or 0.0,
+            'unmatched_rate_amount': job.unmatched_rate_amount or 0.0,
+            'error_count': job.error_count or 0,
+            'total_row_count': job.total_row_count or 0,
         }
 
     @api.model
@@ -829,7 +1147,14 @@ class MvPostlogMatching(models.Model):
         airings that must not reconcile, so they do not belong in All, Matched
         or Unmatched - only in the Removed tab, which asks for them explicitly.
         """
-        domain = []
+        # Only rows our own importer created. Program and Week are both
+        # optional filters, so with neither set the scope was every
+        # mv.spot_data row in the table - including the ones phase28 creates for
+        # Bundle and PP programs, which set no import_program, no
+        # import_week_value and no match status. Those belong to a different
+        # pipeline: they would arrive here with a blank Info and no stored
+        # verdict, looking like the workbench had failed on them.
+        domain = [('import_program', '!=', False)]
         if not include_removed:
             domain.append(('removed', '=', False))
         if program_id:
@@ -1043,6 +1368,10 @@ class MvPostlogMatching(models.Model):
             )
             counts['matched'] += counts_part['matched']
             counts['unmatched'] += counts_part['unmatched']
+        # Whatever this run attached now consumes capacity. Done once for the
+        # whole call rather than per group, so an import recomputes each
+        # schedule a single time.
+        self._recompute_postlog_overruns(postlogs.mapped('schedule').ids)
         return counts
 
     @api.model
@@ -1185,7 +1514,10 @@ class MvPostlogMatching(models.Model):
         """
         domain = list(base_domain)
         if status == 'matched':
-            domain += [('import_match_status', '=', 'matched')]
+            domain += [('import_match_status', '=', 'matched'),
+                       ('is_overrun', '=', False)]
+        elif status == 'overruns':
+            domain += [('is_overrun', '=', True)]
         elif status == 'unmatched':
             domain += [('import_match_status', '=', 'unmatched')]
         elif status == 'suggestions':
@@ -1241,8 +1573,8 @@ class MvPostlogMatching(models.Model):
         other tab, which is what makes the Removed count meaningful. Removed is
         counted separately, against the same scope with the exclusion lifted.
         """
-        counts = {'all': 0, 'matched': 0, 'unmatched': 0,
-                  'suggestions': 0, 'no_suggestion': 0, 'removed': 0}
+        counts = {'all': 0, 'matched': 0, 'unmatched': 0, 'suggestions': 0,
+                  'no_suggestion': 0, 'removed': 0, 'overruns': 0}
         counts['removed'] = self.search_count(
             [term for term in base_domain if term != ('removed', '=', False)]
             + [('removed', '=', True)]
@@ -1256,13 +1588,82 @@ class MvPostlogMatching(models.Model):
         )
         for status, count in groups:
             counts['matched' if status == 'matched' else 'unmatched'] += count
-        counts['all'] = counts['matched'] + counts['unmatched']
+        # An overrun row is attached, so it arrives in `matched` above - but it
+        # needs review, and leaving it in Matched hides it among the settled
+        # rows. Carved out into its own bucket, so
+        # All = Matched + Unmatched + Overruns.
+        counts['overruns'] = self.search_count(
+            base_domain + [('is_overrun', '=', True)]
+        )
+        counts['matched'] = max(0, counts['matched'] - counts['overruns'])
+        counts['all'] = (
+            counts['matched'] + counts['unmatched'] + counts['overruns']
+        )
         counts['suggestions'] = self.search_count(
             base_domain + [('import_match_status', '=', 'unmatched'),
                            ('suggested_schedule', '!=', False)]
         )
         counts['no_suggestion'] = counts['unmatched'] - counts['suggestions']
         return counts
+
+    @api.model
+    def _postlog_stored_dollars(self, base_domain):
+        """Sum of `spot_rate` per tab, mirroring _postlog_stored_counts.
+
+        Unlike the prelog workbench - which already holds every row in
+        memory - this side only ever loads the visible page, so the
+        totals MUST come from SQL aggregates. Summing the returned rows
+        in JS would silently total just 200 records.
+
+        Buckets are kept in lockstep with the counts dict so each tab's
+        dollar figure describes exactly the rows its badge counts.
+        """
+        dollars = {
+            'all': 0.0, 'matched': 0.0, 'unmatched': 0.0,
+            'suggestions': 0.0, 'no_suggestion': 0.0, 'removed': 0.0,
+            'overruns': 0.0,
+        }
+
+        def _sum(domain):
+            # _read_group with no groupby returns a single tuple of the
+            # requested aggregates.
+            groups = self._read_group(domain, [], ['spot_rate:sum'])
+            if not groups:
+                return 0.0
+            value = groups[0][0] if isinstance(groups[0], (list, tuple)) else groups[0]
+            return round(float(value or 0.0), 2)
+
+        dollars['removed'] = _sum(
+            [term for term in base_domain if term != ('removed', '=', False)]
+            + [('removed', '=', True)]
+        )
+
+        groups = self._read_group(
+            base_domain, ['import_match_status'], ['spot_rate:sum'],
+        )
+        for status, rate_sum in groups:
+            key = 'matched' if status == 'matched' else 'unmatched'
+            dollars[key] += float(rate_sum or 0.0)
+        dollars['unmatched'] = round(dollars['unmatched'], 2)
+        # `all` is taken before the carve-out, so it stays the full sum and
+        # still reconciles against the figure the import job recorded.
+        dollars['all'] = round(dollars['matched'] + dollars['unmatched'], 2)
+        # An overrun row is attached, so it arrived in `matched` above. The
+        # counts dict carves it out into its own bucket; the dollars have to
+        # follow, or Matched's total would describe rows its badge excludes.
+        dollars['overruns'] = _sum(base_domain + [('is_overrun', '=', True)])
+        dollars['matched'] = round(
+            max(0.0, dollars['matched'] - dollars['overruns']), 2,
+        )
+
+        dollars['suggestions'] = _sum(
+            base_domain + [('import_match_status', '=', 'unmatched'),
+                           ('suggested_schedule', '!=', False)]
+        )
+        dollars['no_suggestion'] = round(
+            dollars['unmatched'] - dollars['suggestions'], 2,
+        )
+        return dollars
 
     @api.model
     def _postlog_info_text(self, flags, suggestion_count):
@@ -1378,6 +1779,11 @@ class MvPostlogMatching(models.Model):
         # invites someone to go and match it.
         if postlog.removed:
             status = 'removed'
+        elif postlog.is_overrun:
+            # Attached, so matched - but over capacity outranks that: saying
+            # "Matched" about a spot the schedule had no room for is the part
+            # the operator needs to see.
+            status = 'overrun'
         elif postlog.schedule:
             status = 'matched'
         elif postlog.suggested_schedule:
@@ -1424,7 +1830,9 @@ class MvPostlogMatching(models.Model):
             'status_label': {
                 'matched': _('Matched'),
                 'removed': _('Removed'),
+                'overrun': _('Overrun'),
             }.get(status, _('Unmatched')),
+            'is_overrun': bool(postlog.is_overrun),
             'attached': attached,
             'suggested': suggested,
             'alternatives': candidates[1:],
@@ -1667,6 +2075,12 @@ class MvPostlogMatching(models.Model):
                 self._fuzzy_selection_label(schedule, 'networks')
                 or ''
             ),
+            # Read from the stored figures, not recounted per request: the
+            # workbench shows this beside the schedule name on every row, and
+            # the recompute keeps them current.
+            'units_available': int(schedule.units_available or 0),
+            'postlog_attached_count': schedule.postlog_attached_count or 0,
+            'overrun_amount': schedule.postlog_overrun_amount or 0,
             'status': schedule.status or '',
             'status_label': (
                 self._fuzzy_selection_label(schedule, 'status')

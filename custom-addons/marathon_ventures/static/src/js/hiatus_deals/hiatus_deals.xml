@@ -1,0 +1,334 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+  <!-- ════════════════════════════════════════════════════════════════
+       Reusable multi-select. Program / Advertiser / Agency all render
+       through THIS template, so their look and behaviour are identical
+       by construction rather than by three copies of the markup.
+       ════════════════════════════════════════════════════════════════ -->
+  <t t-name="marathon_ventures.HiatusMultiSelect">
+    <div class="hd-field">
+      <label class="hd-label" t-esc="props.label"/>
+      <div class="hd-ms" t-att-class="ui.open ? 'hd-is-open' : ''"
+           t-on-keydown="onKeydown">
+        <button type="button" class="form-control hd-ms-trigger"
+                t-att-disabled="props.disabled"
+                t-att-class="hasSelection ? 'hd-ms-trigger_active' : ''"
+                aria-haspopup="listbox"
+                t-att-aria-expanded="ui.open ? 'true' : 'false'"
+                t-on-click="toggle">
+          <span class="hd-ms-summary" t-esc="summary"/>
+          <span t-if="hasSelection" class="hd-ms-count" t-esc="props.selected.length"/>
+          <i class="fa fa-chevron-down hd-ms-chevron"/>
+        </button>
+
+        <t t-if="ui.open">
+          <div class="hd-ms-backdrop" t-on-mousedown="close"/>
+          <div class="hd-ms-dropdown" role="listbox">
+            <div class="hd-ms-search">
+              <i class="fa fa-search"/>
+              <input type="search" class="form-control form-control-sm"
+                     t-att-placeholder="'Filter ' + props.label.toLowerCase() + '…'"
+                     t-att-value="ui.term"
+                     t-on-input="onTermInput"/>
+            </div>
+
+            <div class="hd-ms-actions">
+              <button type="button" class="btn btn-link btn-sm"
+                      t-on-mousedown.prevent.stop="onSelectAllVisible">
+                Select all<t t-if="ui.term"> shown</t>
+              </button>
+              <button type="button" class="btn btn-link btn-sm text-danger"
+                      t-att-disabled="!hasSelection"
+                      t-on-mousedown.prevent.stop="onClear">Clear</button>
+            </div>
+
+            <ul class="hd-ms-list">
+              <li t-foreach="filtered" t-as="opt" t-key="opt.value"
+                  class="hd-ms-option" role="option"
+                  t-att-aria-selected="isChecked(opt.value) ? 'true' : 'false'"
+                  t-on-mousedown.prevent="() => this.onToggleOption(opt.value)">
+                <input type="checkbox" t-att-checked="isChecked(opt.value)"
+                       tabindex="-1"/>
+                <span class="hd-ms-option-label" t-att-title="opt.label"
+                      t-esc="opt.label"/>
+              </li>
+              <li t-if="!filtered.length" class="hd-ms-option hd-ms-option_muted">
+                <t t-if="props.options.length">No match for that filter</t>
+                <t t-else="" t-esc="props.emptyHint or 'No options available'"/>
+              </li>
+            </ul>
+
+            <div class="hd-ms-foot">
+              <span class="hd-muted hd-small">
+                <t t-esc="filtered.length"/> shown ·
+                <t t-esc="props.selected.length"/> selected
+              </span>
+              <button type="button" class="btn btn-primary btn-sm"
+                      t-on-click="close">Done</button>
+            </div>
+          </div>
+        </t>
+      </div>
+    </div>
+  </t>
+
+
+  <!-- ════════════════════════════════════════════════════════════════
+       Hiatus Deals page.
+
+       Flow, top to bottom:
+         Step 1  Select Date(s)      - mandatory, gates everything
+         Step 2  Program / Advertiser / Agency, populated from the deals
+                 in that date range, all multi-select
+         Step 3  Search -> results
+       ════════════════════════════════════════════════════════════════ -->
+  <t t-name="marathon_ventures.MvHiatusDeals">
+    <div class="hd-root">
+
+      <div class="hd-page-head">
+        <h1 class="hd-title"><i class="fa fa-calendar-o me-2"/>Hiatus Deals</h1>
+      </div>
+
+      <div class="hd-spinner-overlay" t-if="state.loading">
+        <i class="fa fa-spinner fa-spin fa-2x"/>
+      </div>
+
+      <!-- ── Filters: one row, Date first, then the three
+               multi-selects, then Search. Date gates the rest. ──── -->
+      <section class="hd-filters-card"
+               t-att-class="hasDates ? 'hd-filters-card_ready' : 'hd-filters-card_gated'">
+        <div class="hd-filters-head">
+          <span class="hd-step-num">1</span>
+          <span class="hd-step-title">Filters</span>
+          <span class="hd-req">Date required</span>
+          <span class="hd-muted hd-small hd-step-hint" t-esc="optionsSummary"/>
+          <i t-if="state.optionsLoading" class="fa fa-spinner fa-spin ms-1"/>
+        </div>
+
+        <div class="hd-filters-row">
+          <!-- Date(s) - the gate -->
+          <div class="hd-field hd-field_date">
+            <label class="hd-label">Date(s)</label>
+            <div class="hd-datepicker">
+              <button type="button" class="form-control hd-ms-trigger"
+                      t-att-class="hasDates ? 'hd-ms-trigger_active' : ''"
+                      aria-haspopup="dialog"
+                      t-att-aria-expanded="state.datePickerOpen ? 'true' : 'false'"
+                      t-on-click="toggleDatePicker"
+                      t-on-keydown="onDatePickerKeydown">
+                <i class="fa fa-calendar-o hd-ms-lead"/>
+                <span class="hd-ms-summary" t-esc="datePickerLabel"/>
+                <span t-if="hasDates" class="hd-ms-count"
+                      t-esc="state.selectedDates.length"/>
+                <i class="fa fa-chevron-down hd-ms-chevron"/>
+              </button>
+
+              <t t-if="state.datePickerOpen">
+                <div class="hd-ms-backdrop" t-on-mousedown="closeDatePicker"/>
+                <div class="hd-datepicker-dropdown" role="dialog">
+                  <div class="hd-cal-head">
+                    <button type="button" class="btn btn-sm btn-light"
+                            title="Previous month" t-on-click="onPreviousMonth">
+                      <i class="fa fa-chevron-left"/>
+                    </button>
+                    <div class="hd-cal-month" t-esc="monthLabel"/>
+                    <button type="button" class="btn btn-sm btn-light"
+                            title="Next month" t-on-click="onNextMonth">
+                      <i class="fa fa-chevron-right"/>
+                    </button>
+                  </div>
+
+                  <table class="hd-calendar-table" role="grid">
+                    <thead>
+                      <tr>
+                        <th t-foreach="weekdayLabels" t-as="wd" t-key="wd" scope="col">
+                          <abbr t-att-title="wd" t-esc="wd"/>
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr t-foreach="calendarWeeks" t-as="week" t-key="week.key">
+                        <td t-foreach="week.days" t-as="day" t-key="day.key"
+                            t-att-class="day.cssClass"
+                            t-att-data-date="day.dateStr"
+                            t-on-click="onDateClick">
+                          <t t-esc="day.label"/>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+
+                  <div class="hd-ms-foot">
+                    <span class="hd-muted hd-small" t-esc="datePickerLabel"/>
+                    <div class="hd-ms-actions">
+                      <button type="button" class="btn btn-link btn-sm text-danger"
+                              t-on-click="onClearDates">Clear</button>
+                      <button type="button" class="btn btn-primary btn-sm"
+                              t-on-click="closeDatePicker">Done</button>
+                    </div>
+                  </div>
+                </div>
+              </t>
+            </div>
+          </div>
+
+          <HiatusMultiSelect
+            label="'Program'"
+            placeholder="'All programs'"
+            emptyHint="'No programs in the selected dates'"
+            options="state.options.programs"
+            selected="state.selectedPrograms"
+            disabled="filtersDisabled"
+            onChange.bind="onProgramsChange"/>
+
+          <HiatusMultiSelect
+            label="'Advertiser'"
+            placeholder="'All advertisers'"
+            emptyHint="'No advertisers in the selected dates'"
+            options="state.options.advertisers"
+            selected="state.selectedAdvertisers"
+            disabled="filtersDisabled"
+            onChange.bind="onAdvertisersChange"/>
+
+          <HiatusMultiSelect
+            label="'Agency'"
+            placeholder="'All agencies'"
+            emptyHint="'No agencies in the selected dates'"
+            options="state.options.agencies"
+            selected="state.selectedAgencies"
+            disabled="filtersDisabled"
+            onChange.bind="onAgenciesChange"/>
+
+          <div class="hd-field hd-field_actions">
+            <label class="hd-label">&#160;</label>
+            <button type="button" class="btn btn-primary hd-search-btn"
+                    t-att-disabled="!canSearch"
+                    t-att-title="searchBlockedReason"
+                    t-on-click="onSearch">
+              <i class="fa fa-search me-1"/>Search
+            </button>
+          </div>
+        </div>
+
+        <!-- Selected dates as removable chips, under the row. -->
+        <div class="hd-pills" t-if="hasDates">
+          <span t-foreach="selectedDatePills" t-as="pill" t-key="pill.value"
+                class="hd-pill">
+            <t t-esc="pill.label"/>
+            <button type="button" class="hd-pill-x" title="Remove date"
+                    t-on-click="() => this.removeDatePill(pill.value)">
+              <i class="fa fa-times"/>
+            </button>
+          </span>
+          <button type="button" class="btn btn-link btn-sm"
+                  t-on-click="onClearDates">Clear all</button>
+        </div>
+
+        <div class="hd-filters-gate" t-if="!hasDates">
+          <i class="fa fa-lock me-1"/>
+          Pick a date to unlock Program, Advertiser and Agency — they are
+          built from the deals in that range.
+        </div>
+      </section>
+
+      <!-- ── Step 3: results ────────────────────────────────────── -->
+      <section class="hd-results">
+        <div class="hd-results-header">
+          <h2 class="hd-results-title">Results</h2>
+          <span class="hd-muted hd-small" t-esc="resultsSummary"/>
+        </div>
+
+        <t t-if="hasResults">
+          <div class="hd-table-actions">
+            <button type="button" class="btn btn-secondary"
+                    t-att-disabled="state.loading" t-on-click="onHiatusSelected">
+              Hiatus Selected Deals
+            </button>
+            <button type="button" class="btn btn-link text-danger ms-2"
+                    t-att-disabled="state.loading" t-on-click="onClearHiatus">
+              Clear Hiatus Selected Deals
+            </button>
+          </div>
+
+          <div class="hd-table-wrapper">
+            <table class="table table-sm table-hover hd-results-table">
+              <thead>
+                <tr>
+                  <th class="hd-col-check" scope="col">
+                    <input type="checkbox" title="Select All"
+                           t-att-checked="allRowsSelected"
+                           t-on-change="onSelectAll"/>
+                  </th>
+                  <th scope="col">Deal</th>
+                  <th scope="col">Program</th>
+                  <th scope="col">Contact Account</th>
+                  <th scope="col">Brands</th>
+                  <th scope="col">Advertiser</th>
+                  <th class="hd-col-narrow" scope="col">Length</th>
+                  <th scope="col">Days Allowed</th>
+                  <th scope="col">Hiatus Dates</th>
+                  <th class="hd-col-remove" scope="col">Remove</th>
+                </tr>
+              </thead>
+              <tbody>
+                <t t-foreach="state.rows" t-as="row" t-key="row.id">
+                  <tr t-att-class="row.selected ? 'hd-row-selected' : ''">
+                    <td class="hd-col-check">
+                      <input type="checkbox" t-att-checked="row.selected"
+                             t-on-change="(ev) => this.onRowSelect(row, ev)"/>
+                    </td>
+                    <td t-att-class="rowCellClass(row)">
+                      <div t-if="row.showGroupHeader" class="hd-group-header"
+                           t-esc="row.groupLabel"/>
+                      <a t-att-href="row.dealUrl" target="_blank" rel="noopener"
+                         t-esc="row.name"/>
+                    </td>
+                    <td t-att-class="rowCellClass(row)">
+                      <a t-if="row.programUrl" t-att-href="row.programUrl"
+                         target="_blank" rel="noopener" t-esc="row.programName"/>
+                      <t t-else="" t-esc="row.programName"/>
+                    </td>
+                    <td t-att-class="rowCellClass(row)" t-esc="row.contactAccount"/>
+                    <td t-att-class="rowCellClass(row)">
+                      <a t-if="row.brandUrl" t-att-href="row.brandUrl"
+                         target="_blank" rel="noopener" t-esc="row.brandName"/>
+                      <t t-else="" t-esc="row.brandName"/>
+                    </td>
+                    <td t-att-class="rowCellClass(row)" t-esc="row.advertiser"/>
+                    <td t-att-class="rowCellClass(row)" t-esc="row.length"/>
+                    <td t-att-class="rowCellClass(row)" t-esc="row.daysAllowed"/>
+                    <td t-att-class="rowCellClass(row)" t-esc="row.formattedHiatus"/>
+                    <td class="hd-col-remove text-center">
+                      <button type="button" class="btn btn-sm btn-link text-danger"
+                              title="Remove from results"
+                              t-att-disabled="state.loading"
+                              t-on-click="() => this.onRemoveRow(row)">
+                        <i class="fa fa-times"/>
+                      </button>
+                    </td>
+                  </tr>
+                </t>
+              </tbody>
+            </table>
+          </div>
+        </t>
+
+        <div t-else="" class="hd-empty">
+          <t t-if="!hasDates">
+            Select date(s) in step 1, then Search.
+          </t>
+          <t t-elif="state.hasSearched">
+            No deals matched those filters. Widen the dates or clear a
+            filter and search again.
+          </t>
+          <t t-else="">
+            Ready — adjust the filters if you need to, then click
+            <b>Search</b>.
+          </t>
+        </div>
+      </section>
+    </div>
+  </t>
+
+</templates>

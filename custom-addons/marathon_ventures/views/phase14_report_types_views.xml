@@ -33,6 +33,14 @@
             <group>
               <field name="base_model_id"
                      options="{'no_create': True}"/>
+              <!-- Accounts and Contacts are both res.partner, so the
+                   Account/Contact split is expressed here rather than
+                   as two Base Model entries. Hidden for every other
+                   base model. -->
+              <field name="is_partner_base" invisible="1"/>
+              <field name="partner_scope"
+                     invisible="not is_partner_base"
+                     required="is_partner_base"/>
               <field name="owner_id" readonly="1"/>
             </group>
             <group>

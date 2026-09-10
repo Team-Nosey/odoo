@@ -129,10 +129,12 @@ class MvPrelogDataFuzzyMatching(models.Model):
             import_job_id=import_job_id,
         )
         counts = self._prelog_stored_counts(count_domain)
+        dollars = self._prelog_stored_dollar_totals(count_domain)
         domain = self._prelog_stored_domain(
             base_domain, status, issue_filter, air_date, search_term,
         )
         total = self.search_count(domain)
+        filtered_dollars = self._prelog_stored_rate_sum(domain)
         if total:
             offset = min(offset, ((total - 1) // limit) * limit)
         else:
@@ -151,6 +153,37 @@ class MvPrelogDataFuzzyMatching(models.Model):
             'page': (offset // limit) + 1 if total else 0,
             'pages': ((total + limit - 1) // limit) if total else 0,
             'counts': counts,
+            'dollars': dollars,
+            # Dollar value of the CURRENT view (tab + search + air date
+            # + issue filter), across every matching row, not just the
+            # visible page.
+            'filtered_dollars': filtered_dollars,
+        }
+
+    @api.model
+    def _fuzzy_dollar_totals(self, all_rows):
+        """Sum of `rate` per tab, mirroring the `counts` buckets.
+
+        Kept in lockstep with the counts dict above so a tab's dollar
+        figure always describes exactly the rows its badge counts.
+        """
+        def _sum(predicate):
+            return round(sum(
+                float(row.get('rate') or 0.0)
+                for row in all_rows
+                if predicate(row)
+            ), 2)
+
+        return {
+            'all': _sum(lambda r: r['status'] != 'removed'),
+            'matched': _sum(lambda r: r['status'] == 'matched'),
+            'unmatched': _sum(
+                lambda r: r['status'] in ('suggestion', 'no_suggestion')
+            ),
+            'suggestions': _sum(lambda r: r['status'] == 'suggestion'),
+            'no_suggestion': _sum(lambda r: r['status'] == 'no_suggestion'),
+            'removed': _sum(lambda r: r['status'] == 'removed'),
+            'overruns': _sum(lambda r: r['status'] == 'overrun'),
         }
 
     @api.model
@@ -1178,6 +1211,18 @@ class MvPrelogDataFuzzyMatching(models.Model):
             ),
             'submitted_by': job.submitted_by_id.display_name,
             'row_count': len(job.prelog_ids),
+            # Authoritative "as uploaded" figure, so the workbench total
+            # can be verified against the file. NOTE: the job sums the
+            # rate of EVERY parsed row, including ones that then failed
+            # to create - so when error_count > 0 this legitimately
+            # exceeds the live sum over stored rows. error_count is
+            # exposed alongside it so the UI can explain a gap rather
+            # than look broken.
+            'total_rate_amount': job.total_rate_amount or 0.0,
+            'matched_rate_amount': job.matched_rate_amount or 0.0,
+            'unmatched_rate_amount': job.unmatched_rate_amount or 0.0,
+            'error_count': job.error_count or 0,
+            'total_row_count': job.total_row_count or 0,
         }
 
     @api.model
@@ -1592,6 +1637,47 @@ class MvPrelogDataFuzzyMatching(models.Model):
         )
         counts['no_suggestion'] = counts['unmatched'] - counts['suggestions']
         return counts
+
+    @api.model
+    def _prelog_stored_rate_sum(self, domain):
+        """Return a database-backed rate total without loading result rows."""
+        groups = self._read_group(domain, [], ['rate:sum'])
+        return round(float(groups[0][0] or 0.0), 2) if groups else 0.0
+
+    @api.model
+    def _prelog_stored_dollar_totals(self, base_domain):
+        """Return full-scope rate totals for each stored Workbench tab."""
+        totals = {
+            'all': 0.0,
+            'matched': 0.0,
+            'unmatched': 0.0,
+            'suggestions': 0.0,
+            'no_suggestion': 0.0,
+            'removed': 0.0,
+            'overruns': 0.0,
+        }
+        groups = self._read_group(
+            base_domain,
+            ['import_match_status', 'is_overrun', 'suggested_schedule'],
+            ['rate:sum'],
+        )
+        for status, is_overrun, suggested_schedule, rate_sum in groups:
+            amount = float(rate_sum or 0.0)
+            totals['all'] += amount
+            if status == 'unmatched':
+                totals['unmatched'] += amount
+                bucket = 'suggestions' if suggested_schedule else 'no_suggestion'
+                totals[bucket] += amount
+            elif is_overrun:
+                totals['overruns'] += amount
+            elif status == 'matched':
+                totals['matched'] += amount
+
+        removed_domain = [
+            term for term in base_domain if term != ('removed', '=', False)
+        ] + [('removed', '=', True)]
+        totals['removed'] = self._prelog_stored_rate_sum(removed_domain)
+        return {key: round(value, 2) for key, value in totals.items()}
 
     @api.model
     def _prelog_stored_row(self, prelog):

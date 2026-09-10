@@ -88,7 +88,40 @@
             <button t-att-class="state.activeTab === 'no_suggestion' ? 'active' : ''" t-on-click="() => this.setTab('no_suggestion')">No Suggestion <span t-esc="state.counts.no_suggestion"/></button>
             <button t-att-class="state.activeTab === 'removed' ? 'active' : ''" t-on-click="() => this.setTab('removed')">Removed <span t-esc="state.counts.removed"/></button>
             <button t-att-class="state.activeTab === 'overruns' ? 'active' : ''" t-on-click="() => this.setTab('overruns')">Overruns <span t-esc="state.counts.overruns"/></button>
+
+            <!-- Total Dollars for the current view. Server-computed over
+                 the whole scope, so it is NOT limited to the visible
+                 page. When a single upload is in view it also reconciles
+                 against the file's own total. -->
+            <div class="mv-fuzzy__dollars" t-att-class="dollarsReconcileClass"
+                 t-att-title="totalDollarsTitle">
+              <span class="mv-fuzzy__dollars-label">Total Dollars:</span>
+              <span class="mv-fuzzy__dollars-value" t-esc="totalDollarsLabel"/>
+              <t t-if="state.dollarsAvailable and dollarsReconcile">
+                <i t-if="dollarsReconcile.matches"
+                   class="fa fa-check-circle mv-fuzzy__dollars-icon"/>
+                <i t-else="" class="fa fa-exclamation-triangle mv-fuzzy__dollars-icon"/>
+              </t>
+            </div>
           </nav>
+
+          <!-- Reconciliation detail, only when the processed total does
+               not equal the uploaded file's total. -->
+          <div class="mv-fuzzy__dollars-note" t-if="state.dollarsAvailable and dollarsReconcile and !dollarsReconcile.matches">
+            <i class="fa fa-exclamation-triangle me-1"/>
+            <t t-if="dollarsReconcile.explained">
+              Uploaded file totalled <strong t-esc="dollarsReconcile.uploadedLabel"/>,
+              processed <strong t-esc="dollarsReconcile.processedLabel"/>
+              (<t t-esc="dollarsReconcile.diffLabel"/>) —
+              <t t-esc="dollarsReconcile.errors"/> row(s) failed to import.
+            </t>
+            <t t-else="">
+              Processed <strong t-esc="dollarsReconcile.processedLabel"/> but the
+              uploaded file totalled <strong t-esc="dollarsReconcile.uploadedLabel"/>
+              (<t t-esc="dollarsReconcile.diffLabel"/>). No rows errored, so this
+              gap needs investigating.
+            </t>
+          </div>
 
           <div class="mv-fuzzy__searchbar">
             <label class="mv-fuzzy__search">

@@ -632,4 +632,41 @@ class MvReportFilter(models.Model):
                 val = raw
         except (ValueError, TypeError):
             val = raw
+
+        # ── Equals is a CASE-INSENSITIVE exact match on text-ish fields ──
+        #
+        # Requirement: stored 'Business' must be found by 'business',
+        # 'BUSINESS', 'BuSiNeSs'. Odoo's '=' maps to SQL '=', which is
+        # case-SENSITIVE on varchar/text, so those returned nothing.
+        #
+        # '=ilike' is the right tool: it is ILIKE with the pattern passed
+        # through verbatim, so with no wildcards in it that is exactly a
+        # case-insensitive equality test.
+        #
+        # Scope, deliberately narrow:
+        #   * ONLY op == '='. Not Equals, Contains, Starts/Ends With,
+        #     Greater/Less Than, In/Not In, Is Empty/Is Set are all
+        #     untouched.
+        #   * ONLY text-backed column types. Numbers, booleans and
+        #     dates have no letter case, and routing them through
+        #     '=ilike' would force a pointless text cast (and break the
+        #     date domain optimizer).
+        #   * many2one IS included: Odoo resolves ('brands', '=', 'X')
+        #     against the display name, so the same casing problem
+        #     applies to it - which is the exact case in the report
+        #     screenshot (Brands Equals "Business").
+        #
+        # Wildcards are escaped so a value containing % or _ stays a
+        # literal. Without this, 'A_B' would match 'AxB' - turning an
+        # exact match into a pattern match.
+        _CI_EQUALS_TTYPES = (
+            'char', 'text', 'html', 'selection', 'many2one',
+            'many2many', 'one2many', 'reference',
+        )
+        if op == '=' and ttype in _CI_EQUALS_TTYPES and isinstance(val, str):
+            if val:
+                escaped = val.replace('\\', '\\\\')
+                escaped = escaped.replace('%', r'\%').replace('_', r'\_')
+                return (path, '=ilike', escaped)
+
         return (path, op, val)

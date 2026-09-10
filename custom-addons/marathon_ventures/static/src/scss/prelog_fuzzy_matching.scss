@@ -437,12 +437,73 @@
         span { color: #536b8c; font-size: 0.75rem; }
     }
 
+    // Total Dollars sits at the right-hand end of the tab strip. The
+    // strip is a flex row with no justify-content, so margin-left:auto
+    // is what pushes this to the far edge.
+    // NOTE: this file is shared - the Postlog Workbench reuses the same
+    // mv-fuzzy__* class names, so these rules style BOTH workbenches.
+    &__dollars {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        margin-left: auto;
+        margin-bottom: 0.4rem;
+        padding: 0.3rem 0.7rem;
+        flex: 0 0 auto;
+        border: 1px solid var(--mv-fuzzy-border);
+        border-radius: 6px;
+        background: #fff;
+        white-space: nowrap;
+    }
+    &__dollars-label {
+        font-size: 0.78rem;
+        font-weight: 600;
+        color: #6a7587;
+    }
+    &__dollars-value {
+        font-size: 0.95rem;
+        font-weight: 800;
+        color: var(--mv-fuzzy-navy, #273348);
+        font-variant-numeric: tabular-nums;
+    }
+    &__dollars-icon { font-size: 0.8rem; }
+
+    // Reconciliation state against the uploaded file's own total.
+    &__dollars-ok {
+        border-color: #7bbf8a;
+        background: #f2fbf4;
+        .mv-fuzzy__dollars-icon { color: #2e7d3a; }
+    }
+    // Mismatch that IS explained by failed rows - informational.
+    &__dollars-warn {
+        border-color: #d9a55b;
+        background: #fffaf1;
+        .mv-fuzzy__dollars-icon { color: #b3701e; }
+    }
+    // Mismatch with no failed rows to explain it - needs attention.
+    &__dollars-bad {
+        border-color: #d98080;
+        background: #fdf3f3;
+        .mv-fuzzy__dollars-icon { color: #b32d2d; }
+    }
+
+    &__dollars-note {
+        margin: 0.5rem 1rem 0;
+        padding: 0.5rem 0.75rem;
+        border-radius: 6px;
+        border: 1px solid #d9a55b;
+        background: #fffaf1;
+        color: #5d4a19;
+        font-size: 0.78rem;
+    }
+
     &__tabs {
         display: flex;
         gap: 0.25rem;
         padding: 0.7rem 1rem 0;
         overflow-x: auto;
         border-bottom: 1px solid var(--mv-fuzzy-border);
+        align-items: flex-end;
 
         button {
             padding: 0.65rem 0.78rem;

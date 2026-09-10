@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+  <!--
+    Hiatus Deals - client action backing the OWL page that replaces the
+    Salesforce HiatusDeals LWC.
+
+    The `tag` MUST match the string in
+      registry.category("actions").add("mv_hiatus_deals", MvHiatusDeals)
+    in static/src/js/hiatus_deals/hiatus_deals.js.
+  -->
+  <record id="action_mv_hiatus_deals_page" model="ir.actions.client">
+    <field name="name">Hiatus Deals</field>
+    <field name="tag">mv_hiatus_deals</field>
+    <field name="target">main</field>
+  </record>
+
+  <menuitem id="menu_mv_hiatus_deals"
+            name="Hiatus Deals"
+            parent="menu_mv_operations"
+            action="action_mv_hiatus_deals_page"
+            sequence="7"/>
+
+</odoo>

@@ -46,6 +46,11 @@ class TestPostlogWorkbenchUI(HttpCase):
             'days_allowed': [Command.set(monday.ids)],
             'rate': 100.0,
             'status': 'sold',
+            # One unit sold, two fixture rows: attaching both is an overrun,
+            # which is the only state where the badge and drawer panel render.
+            # With one row attached - every step before the overrun block - the
+            # schedule is exactly at capacity and nothing is flagged.
+            'units_available': 1,
         })
         cls.postlog = cls.env['mv.spot_data'].create({
             'import_program': cls.program.id,

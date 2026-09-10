@@ -340,7 +340,13 @@
               <field name="units_aired" readonly="0"/>
               <field name="units_by_separation" readonly="0"/>
               <field name="units_cap" readonly="0"/>
-              <field name="units_preempted" readonly="0"/>
+              <field name="units_preempted" readonly="0"
+                     help="0.0 here can mean either 'nothing was preempted' or 'Run Preemptions has never covered this week' - the Preemptions badge beside it says which."/>
+              <!-- Empty, and so invisible, once a run has covered this
+                   schedule's week. Only appears when there is something to
+                   say. -->
+              <field name="units_preempted_state" widget="badge"
+                     invisible="not units_preempted_state"/>
               <field name="units_remaining" readonly="0"/>
               <field name="video_file" readonly="0"/>
               <field name="week_in_month" readonly="0"/>

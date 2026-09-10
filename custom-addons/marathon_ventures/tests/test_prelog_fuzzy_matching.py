@@ -641,6 +641,16 @@ class TestPrelogFuzzyMatching(TransactionCase):
             'removed': 1,
             'overruns': 0,
         })
+        self.assertEqual(result['dollars'], {
+            'all': 300.0,
+            'matched': 100.0,
+            'unmatched': 200.0,
+            'suggestions': 100.0,
+            'no_suggestion': 100.0,
+            'removed': 100.0,
+            'overruns': 0.0,
+        })
+        self.assertEqual(result['filtered_dollars'], 300.0)
         self.assertNotIn(already_removed.id, [row['id'] for row in result['rows']])
 
         self.env['mv.prelog_data'].fuzzy_match_set_removed(

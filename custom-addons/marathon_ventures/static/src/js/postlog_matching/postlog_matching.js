@@ -30,13 +30,24 @@ export class MvPostlogMatching extends Component {
             filters: { programId: false, weekStart: "", importJobId: false },
             activeTab: "all",
             counts: { all: 0, matched: 0, unmatched: 0, suggestions: 0,
-                      no_suggestion: 0, removed: 0 },
+                      no_suggestion: 0, removed: 0, overruns: 0 },
+            // Dollar totals per tab, plus the total for the current
+            // view. Both are SQL aggregates over the FULL scope -
+            // never sum state.rows, that is only the visible page.
+            dollars: { all: 0, matched: 0, unmatched: 0, suggestions: 0,
+                       no_suggestion: 0, removed: 0, overruns: 0 },
+            filteredDollars: 0,
+            // False until a search returns totals, so the badge can
+            // show "-" rather than a misleading $0.00.
+            dollarsAvailable: false,
             searchTerm: "",
             airDate: "",
             issueFilter: "",
             refreshing: false,
+            preempting: false,
             importJob: false,
             drawerAnchor: 0,
+            drawerOverrun: null,
             sortBy: "air_date",
             sortDirection: "asc",
             rows: [],
@@ -151,6 +162,19 @@ export class MvPostlogMatching extends Component {
             this.state.page = result.page || 0;
             this.state.pages = result.pages || 0;
             this.state.counts = result.counts || this.state.counts;
+            // Distinguish "server sent 0" from "server sent nothing":
+            // assets reload on file change but Python only on restart,
+            // so a stale backend would otherwise render $0.00.
+            this.state.dollarsAvailable = result.filtered_dollars !== undefined;
+            this.state.dollars = result.dollars || this.state.dollars;
+            this.state.filteredDollars = Number(result.filtered_dollars || 0);
+            if (!this.state.dollarsAvailable) {
+                console.warn(
+                    "[MV] fuzzy_match_search returned no dollar totals - " +
+                    "the Odoo Python process is probably running older " +
+                    "code than the assets. Restart Odoo.",
+                );
+            }
             this.state.hasFiltered = true;
         } finally {
             if (requestId === this.requestId) this.state.querying = false;
@@ -384,8 +408,13 @@ export class MvPostlogMatching extends Component {
             pages: 0,
             counts: {
                 all: 0, matched: 0, unmatched: 0, suggestions: 0,
-                no_suggestion: 0, removed: 0,
+                no_suggestion: 0, removed: 0, overruns: 0,
             },
+            dollars: {
+                all: 0, matched: 0, unmatched: 0, suggestions: 0,
+                no_suggestion: 0, removed: 0, overruns: 0,
+            },
+            filteredDollars: 0,
             selectedRows: {},
             selectAllMatching: false,
             excludedRows: {},
@@ -461,6 +490,50 @@ export class MvPostlogMatching extends Component {
         this.state.importJob = false;
     }
 
+    /** Set Units Preempted for every schedule in the selected Program/week.
+     *
+     *  Confirms with the figure that matters first: how many schedules have no
+     *  matched spots and are about to be marked fully preempted. That number is
+     *  either a real preemption report or evidence the week is not finished,
+     *  and this is the last moment the difference is cheap.
+     */
+    async onRunPreemptions() {
+        const f = this.state.filters;
+        if (!f.programId || !f.weekStart) {
+            this.notification.add(
+                "Choose a Program and a Week before running preemptions.",
+                { type: "info" },
+            );
+            return;
+        }
+        this.state.preempting = true;
+        try {
+            const preview = await this.orm.call(
+                "mv.spot_data", "fuzzy_preemption_preview",
+                [f.programId, f.weekStart],
+            );
+            const question =
+                `Run preemptions on ${preview.schedules} schedule(s) for `
+                + `${preview.program}, week ${preview.week}?\n\n`
+                + `${preview.with_spots} have matched spots.\n`
+                + `${preview.without_spots} have none and will be marked fully `
+                + `preempted (${preview.units_without_spots} unit(s)).`;
+            if (!window.confirm(question)) return;
+
+            const result = await this.orm.call(
+                "mv.spot_data", "fuzzy_run_preemptions",
+                [f.programId, f.weekStart],
+            );
+            this.notification.add(result.message, {
+                type: result.updated ? "success" : "info",
+            });
+            // Units Preempted lives on the schedule, so nothing in the row
+            // payload changed - but reloading keeps the drawer's attached
+            // schedule figures honest.
+            await this._loadResults();
+        } finally { this.state.preempting = false; }
+    }
+
     async onRefresh() {
         const f = this.state.filters;
         this.state.refreshing = true;
@@ -468,8 +541,14 @@ export class MvPostlogMatching extends Component {
             const result = await this.orm.call("mv.spot_data", "fuzzy_match_refresh", [
                 f.programId || false, f.weekStart || false, f.importJobId || false,
             ]);
+            // Success when anything actually moved - a Refresh that only
+            // corrected overruns did real work, and calling that "info" read
+            // as though it had done nothing.
+            const changed = result.attached
+                || result.overruns?.flagged
+                || result.overruns?.cleared;
             this.notification.add(result.message, {
-                type: result.attached ? "success" : "info",
+                type: changed ? "success" : "info",
             });
             await this._loadResults();
         } finally {
@@ -610,8 +689,47 @@ export class MvPostlogMatching extends Component {
         this.state.drawerRow = row;
         this.state.drawerAnchor = Math.max(this.state.rows.indexOf(row), 0);
         this.state.manualSchedule = "";
+        // Fetched rather than carried on the row: the panel lists the schedule's
+        // OTHER rows, which the row itself knows nothing about. Only for overrun
+        // rows, so a normal review costs no extra request.
+        this.state.drawerOverrun = null;
+        if (row?.is_overrun && row.attached?.id) {
+            this._loadDrawerOverrun(row.attached.id);
+        }
     }
-    closeDrawer() { this.state.drawerRow = false; this.state.manualSchedule = ""; }
+
+    async _loadDrawerOverrun(scheduleId) {
+        try {
+            this.state.drawerOverrun = await this.orm.call(
+                "mv.spot_data", "fuzzy_workbench_overrun_details", [scheduleId],
+            ) || null;
+        } catch {
+            // The panel is context, not the point of the drawer - a failure
+            // here must not stop someone reviewing the row.
+            this.state.drawerOverrun = null;
+        }
+    }
+
+    closeDrawer() {
+        this.state.drawerRow = false;
+        this.state.manualSchedule = "";
+        this.state.drawerOverrun = null;
+    }
+
+    /** Open every postlog on this overrun schedule in the Postlog Data list,
+     *  by id - so the list cannot disagree with the panel that opened it. */
+    async viewAllOverrunPostlogs() {
+        const details = this.state.drawerOverrun;
+        if (!details?.all_postlog_ids?.length) return;
+        await this.action.doAction({
+            type: "ir.actions.act_window",
+            res_model: "mv.spot_data",
+            name: `Postlogs on ${details.schedule_name}`,
+            views: [[false, "list"], [false, "form"]],
+            domain: [["id", "in", details.all_postlog_ids]],
+            target: "current",
+        });
+    }
 
     async onExport() {
         if (!this._filtersAreValid()) return;
@@ -830,6 +948,89 @@ export class MvPostlogMatching extends Component {
             minimumFractionDigits: 2, maximumFractionDigits: 2,
         }) : "";
     }
+
+    // ---- Total Dollars ------------------------------------------
+    // Mirrors the Prelog Workbench. All figures are SQL aggregates
+    // computed server-side over the full scope, so they are never
+    // limited to the 200-row page.
+    formatDollars(value) {
+        const n = Number(value || 0);
+        return n.toLocaleString(undefined, {
+            minimumFractionDigits: 2, maximumFractionDigits: 2,
+        });
+    }
+
+    get totalDollarsLabel() {
+        if (!this.state.dollarsAvailable) return "\u2014";
+        return `$${this.formatDollars(this.state.filteredDollars)}`;
+    }
+
+    get totalDollarsTitle() {
+        if (!this.state.dollarsAvailable) {
+            return "Totals unavailable: the server did not return dollar " +
+                   "figures. Restart Odoo so the Python process picks up " +
+                   "the current code.";
+        }
+        return this.dollarsReconcileTitle ||
+               "Total for the rows currently in view (all pages, not just this one).";
+    }
+
+    /** The uploaded file's own total, when a specific upload is in view. */
+    get uploadedDollars() {
+        const up = this.state.latestUpload;
+        if (!up || !this.state.filters.importJobId) return null;
+        if (up.id !== this.state.filters.importJobId) return null;
+        return Number(up.total_rate_amount || 0);
+    }
+
+    /**
+     * Reconcile the processed total against the file total. Compared
+     * against dollars.all (the whole upload), and only when the view is
+     * scoped to that one import job - otherwise the two figures cover
+     * different row sets and a mismatch would be meaningless.
+     */
+    get dollarsReconcile() {
+        const uploaded = this.uploadedDollars;
+        if (uploaded === null) return null;
+        const processed = Number(this.state.dollars.all || 0);
+        const diff = processed - uploaded;
+        const matches = Math.abs(diff) < 0.005;
+        const errors = Number(
+            (this.state.latestUpload && this.state.latestUpload.error_count) || 0,
+        );
+        return {
+            matches,
+            diff,
+            errors,
+            processedLabel: `$${this.formatDollars(processed)}`,
+            uploadedLabel: `$${this.formatDollars(uploaded)}`,
+            diffLabel: `${diff > 0 ? "+" : "-"}$${this.formatDollars(Math.abs(diff))}`,
+            // Expected when rows failed to import: the job totals every
+            // parsed row, including ones that never became records.
+            explained: !matches && errors > 0,
+        };
+    }
+
+    get dollarsReconcileClass() {
+        const r = this.dollarsReconcile;
+        if (!r) return "";
+        if (r.matches) return "mv-fuzzy__dollars-ok";
+        return r.explained
+            ? "mv-fuzzy__dollars-warn"
+            : "mv-fuzzy__dollars-bad";
+    }
+
+    get dollarsReconcileTitle() {
+        const r = this.dollarsReconcile;
+        if (!r) return "";
+        if (r.matches) {
+            return `Processed total matches the uploaded file (${r.uploadedLabel}).`;
+        }
+        if (r.explained) {
+            return `Uploaded file totalled ${r.uploadedLabel} but ${r.errors} row(s) failed to import, so ${r.processedLabel} was processed (${r.diffLabel}).`;
+        }
+        return `Processed ${r.processedLabel} but the uploaded file totalled ${r.uploadedLabel} (${r.diffLabel}). No rows errored, so this gap needs investigating.`;
+    }
     /** Two badges for two stored states. Not `--${row.status}`: that emitted a
      *  third, red, No Suggestion badge for a split the Info column now makes. */
     statusBadge(row) {
@@ -838,6 +1039,9 @@ export class MvPostlogMatching extends Component {
         }
         if (row.status === "removed") {
             return "mv-fuzzy__status mv-fuzzy__status--removed";
+        }
+        if (row.status === "overrun") {
+            return "mv-fuzzy__status mv-fuzzy__status--overrun";
         }
         return "mv-fuzzy__status mv-postlog-status--unmatched";
     }
@@ -849,6 +1053,7 @@ export class MvPostlogMatching extends Component {
             suggestions: "Suggestions",
             no_suggestion: "No Suggestion",
             removed: "Removed",
+            overruns: "Overruns",
         }[this.state.activeTab] || "All";
     }
 

@@ -216,14 +216,36 @@ class MvReport(models.Model):
     # --- Domain builder ---------------------------------------------
     def _build_domain(self):
         """Turn mv.report.filter rows into an Odoo domain. AND-only for
-        now; OR groups are a follow-up."""
+        now; OR groups are a follow-up.
+
+        Also applies the Report Type's Account/Contact Record Scope.
+        Odoo stores companies and individuals in the SAME model
+        (res.partner, discriminated by is_company), so a report type
+        based on it needs this to behave like an Account-only or
+        Contact-only report. Prepended to the user's filters, which are
+        AND-ed, so it always narrows and can never be filtered away.
+        """
         self.ensure_one()
-        domain = []
+        domain = self._mv_partner_scope_domain()
         for f in self.filter_ids.sorted('sequence'):
             term = f._to_domain_term()
             if term:
                 domain.append(term)
         return domain
+
+    def _mv_partner_scope_domain(self):
+        """[] unless this report is based on res.partner AND the report
+        type restricts the scope to Accounts or Contacts."""
+        self.ensure_one()
+        report_type = self.report_type_id
+        if not report_type or self.model_name != 'res.partner':
+            return []
+        scope = report_type.partner_scope or 'all'
+        if scope == 'company':
+            return [('is_company', '=', True)]
+        if scope == 'person':
+            return [('is_company', '=', False)]
+        return []
 
 
 # ---------------------------------------------------------------------

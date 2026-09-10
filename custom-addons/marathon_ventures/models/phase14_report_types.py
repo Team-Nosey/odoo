@@ -32,12 +32,84 @@ class MvReportType(models.Model):
     base_model_id = fields.Many2one(
         'ir.model', string='Base Model', required=True, tracking=True,
         ondelete='cascade',  # ir.model comodel requires explicit ondelete
-        domain="[('model', '=like', 'mv.%')]",
+        domain=lambda self: self._mv_base_model_domain(),
         help='The primary rowset. Every report row starts from an '
-             'instance of this model.',
+             'instance of this model.\n\n'
+             'Marathon models (mv.*) plus the core models this module '
+             'extends are selectable. Accounts and Contacts BOTH live in '
+             'Odoo\'s single "Contact" model (res.partner) - pick that, '
+             'then use Record Scope to restrict the report to Accounts '
+             '(companies) or Contacts (individuals).',
     )
     base_model_name = fields.Char(related='base_model_id.model',
                                    store=True, readonly=True)
+
+    # Core (non-mv.) models that marathon_ventures extends and that are
+    # therefore legitimate report bases. res.partner is the important
+    # one: SF "Account" and SF "Contact" were BOTH migrated onto
+    # res.partner, so without this they are unreportable.
+    # Overridable without a code change via the
+    # `mv_report.extra_base_models` system parameter (comma-separated).
+    _MV_DEFAULT_EXTRA_BASE_MODELS = (
+        'res.partner',
+        'res.users',
+        'product.template',
+        'crm.lead',
+    )
+
+    @api.model
+    def _mv_extra_base_models(self):
+        raw = self.env['ir.config_parameter'].sudo().get_param(
+            'mv_report.extra_base_models', '',
+        ) or ''
+        configured = [p.strip() for p in raw.split(',') if p.strip()]
+        return configured or list(self._MV_DEFAULT_EXTRA_BASE_MODELS)
+
+    @api.model
+    def _mv_base_model_domain(self):
+        """Marathon models OR the extended core models."""
+        return [
+            '|',
+            ('model', '=like', 'mv.%'),
+            ('model', 'in', self._mv_extra_base_models()),
+        ]
+
+    # ------------------------------------------------------------------
+    # Account vs Contact
+    #
+    # Odoo keeps companies AND individuals in ONE model, res.partner,
+    # discriminated by `is_company`. There is exactly one ir.model row
+    # for it, so the Base Model dropdown cannot offer two entries.
+    # Instead this field narrows the rowset, which is what actually
+    # makes an "Account report" different from a "Contact report".
+    #
+    # Injected into the run domain by mv.report._build_domain().
+    # ------------------------------------------------------------------
+    partner_scope = fields.Selection(
+        [
+            ('all', 'Accounts and Contacts'),
+            ('company', 'Accounts only (companies)'),
+            ('person', 'Contacts only (individuals)'),
+        ],
+        string='Record Scope',
+        default='all',
+        help='Only applies when the Base Model is Contact (res.partner). '
+             'Accounts are partners flagged as a company; Contacts are '
+             'individuals. Leave as "Accounts and Contacts" to report on '
+             'both.',
+    )
+
+    @api.depends('base_model_name')
+    def _compute_is_partner_base(self):
+        for rec in self:
+            rec.is_partner_base = rec.base_model_name == 'res.partner'
+
+    # Drives visibility of partner_scope in the form view.
+    is_partner_base = fields.Boolean(
+        string='Base Model Is Contact',
+        compute='_compute_is_partner_base',
+        store=False,
+    )
 
     node_ids = fields.One2many(
         'mv.report.type.node', 'report_type_id',
