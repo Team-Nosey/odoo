@@ -32,17 +32,70 @@
         <attribute name="decoration-muted">status == 'canceled'</attribute>
         <attribute name="decoration-info">test == True</attribute>
       </xpath>
+      <!-- Every field the Schedule form shows, so the show/hide columns
+           menu offers the same set people see on the record: the Details tab
+           plus Additional Fields, 43 of them. Ordered alphabetically by
+           label, which is also the order the menu lists them in.
+
+           Twelve are on by default, plus the record name. Account and
+           Advertiser read through Deal Parent without being stored, so their
+           columns display but do not sort or filter; storing them would fix
+           that and is a model change.
+
+           Adding a field here costs a little on every page load - Odoo reads
+           every field in the arch whether or not its column is showing.
+           Measured against the 8,793 schedules in dev: 19 fields 11.9ms per
+           page of 80, 262 fields 64.5ms. At this size it does not matter. -->
       <xpath expr="//list" position="inside">
-        <field name="deal_parent" optional="show"/>
-        <field name="week" optional="show"/>
-        <field name="rate" widget="monetary" optional="show"/>
-        <field name="units_available" optional="show"/>
-        <field name="total_dollars" widget="monetary" optional="show"/>
-        <field name="equiv_30" optional="hide"/>
+        <field name="x30_rate" widget="monetary" optional="hide"/>
+        <field name="kf_account" optional="show"/>
+        <field name="additional_intacct_si_number" optional="hide"/>
+        <field name="additional_intacct_si_number_comments" optional="hide"/>
+        <field name="kf_advertiser" optional="show"/>
+        <field name="dollars_booked" widget="monetary" optional="hide"/>
+        <field name="kf_brands" optional="hide"/>
+        <field name="dollars_canceled" widget="monetary" optional="hide"/>
         <field name="cap" optional="hide"/>
+        <field name="capped_dollars" widget="monetary" options="{'currency_field': 'currency_id'}" optional="hide"/>
+        <field name="capped_units" optional="hide"/>
+        <field name="days_allowed" widget="many2many_tags" optional="hide"/>
+        <field name="deal_parent" optional="show"/>
+        <field name="end_time" optional="hide"/>
+        <field name="equiv_30" optional="hide"/>
+        <field name="intacct_cm_number" optional="hide"/>
+        <field name="intacct_si_number" optional="hide"/>
+        <field name="intacct_si_number_date_fully_paid" optional="hide"/>
+        <field name="intacct_si_number_payment_status" optional="hide"/>
+        <field name="invoice_date" optional="hide"/>
+        <field name="kf_length" optional="hide"/>
+        <field name="locked_units" optional="hide"/>
+        <field name="max_per_day" optional="hide"/>
+        <field name="net_total" widget="monetary" optional="hide"/>
+        <field name="netsuite_invoice_number" optional="hide"/>
+        <field name="netsuite_invoice_url" optional="hide"/>
+        <field name="kf_order_number" optional="hide"/>
+        <field name="performance" optional="hide"/>
+        <field name="performance_dollars" widget="monetary" optional="hide"/>
+        <field name="priority" optional="hide"/>
+        <field name="program" optional="show"/>
+        <field name="program_daypart" optional="hide"/>
+        <field name="rate" widget="monetary" optional="show"/>
+        <field name="sf_record_type" optional="hide"/>
+        <field name="start_time" optional="show"/>
         <field name="status" optional="show"/>
-        <field name="test" optional="hide"/>
+        <field name="total_dollars" widget="monetary" optional="show"/>
+        <field name="units_aired" optional="show"/>
+        <field name="units_available" optional="show"/>
+        <field name="units_preempted" optional="show"/>
+        <field name="week" optional="show"/>
+        <field name="wo_30_units" optional="hide"/>
+        <field name="wo_booked" widget="monetary" optional="hide"/>        <!-- No columns of their own, but both are read: currency_id so the
+             monetary columns render a symbol, and test because the list's
+             decoration-info paints test records blue and needs the value.
+             Dropping `test` from the arch would have quietly stopped that
+             decoration working - it is not on the form, so it has no column. -->
         <field name="currency_id" column_invisible="1"/>
+        <field name="test" column_invisible="1"/>
       </xpath>
     </field>
   </record>

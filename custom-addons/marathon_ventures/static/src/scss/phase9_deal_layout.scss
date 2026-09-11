@@ -465,6 +465,21 @@
     grid-row-gap: 4px !important;
 }
 
+/* Schedule timing row: Start Time and End Time hold "12:00A", which needs
+   nothing like a fifth of the row, while Days Allowed holds up to seven tags
+   and wrapped onto three lines at an even split. The times give up most of
+   their width to it. The fractions still total 5, so the row is unchanged
+   overall - only the split within it moves. */
+.mv-deal-redesign .mv-essentials-grid-5.mv-timing-row {
+    grid-template-columns:
+        minmax(0, 1fr)      /* Start Week */
+        minmax(0, 1fr)      /* Program Daypart */
+        minmax(0, 0.55fr)   /* Start Time */
+        minmax(0, 0.55fr)   /* End Time */
+        minmax(0, 1.9fr)    /* Days Allowed */
+        !important;
+}
+
 .mv-deal-redesign .mv-essentials-grid-4 > .o_inner_group,
 .mv-deal-redesign .mv-essentials-grid-4 > .o_group,
 .mv-deal-redesign .mv-essentials-grid-5 > .o_inner_group,
@@ -480,13 +495,15 @@
 /* Responsive: 4-col collapses to 2 then 1; 2-col collapses to 1. */
 @media (max-width: 1024px) {
     .mv-deal-redesign .mv-essentials-grid-4,
-    .mv-deal-redesign .mv-essentials-grid-5 {
+    .mv-deal-redesign .mv-essentials-grid-5,
+    .mv-deal-redesign .mv-essentials-grid-5.mv-timing-row {
         grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
     }
 }
 @media (max-width: 640px) {
     .mv-deal-redesign .mv-essentials-grid-4,
     .mv-deal-redesign .mv-essentials-grid-5,
+    .mv-deal-redesign .mv-essentials-grid-5.mv-timing-row,
     .mv-deal-redesign .mv-essentials-grid-2 {
         grid-template-columns: 1fr !important;
     }

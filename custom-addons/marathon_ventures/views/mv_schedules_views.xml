@@ -4,15 +4,17 @@
     <field name="name">mv.schedules.list</field>
     <field name="model">mv.schedules</field>
     <field name="arch" type="xml">
+      <!-- Only the record name. The generator seeded this list with the
+           seven alphabetically-first Schedule fields - ADUs Estimated, ADUs
+           Generated, Access Code, Account Advertiser Program, Account
+           Advertiser, Account Brand Program, Actual Total (000) Primary Demo
+           - none of which carry a value on any of the 8,793 schedules in
+           dev, and none of which were optional, so nobody could hide them.
+           The list opened with seven blank columns that could not be
+           removed. Every column people actually use is declared in
+           view_mv_schedules_list_phase1. -->
       <list string="Schedules">
         <field name="name"/>
-        <field name="adus_estimated"/>
-        <field name="adus_generated"/>
-        <field name="access_code"/>
-        <field name="account_advertiser_program"/>
-        <field name="account_advertiser"/>
-        <field name="account_brand_program"/>
-        <field name="actual_total_000_primary_demo"/>
       </list>
     </field>
   </record>
