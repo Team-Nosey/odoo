@@ -37,7 +37,10 @@ def read_tabular_rows(payload, filename, config):
         )
 
     if extension == ".xls":
-        workbook = xlrd.open_workbook(file_contents=payload)
+        workbook = xlrd.open_workbook(
+            file_contents=payload,
+            logfile=io.StringIO(),
+        )
         if sheet_index >= workbook.nsheets:
             raise UserError("Configured sheetIndex %s is out of range for this workbook." % sheet_index)
         sheet = workbook.sheet_by_index(sheet_index)
